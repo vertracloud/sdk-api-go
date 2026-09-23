@@ -57,7 +57,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "Folders.Create", wantMethod: http.MethodPost, wantPath: "/v1/users/me/resource-organization/folders",
+			name: "Folders.Create", wantMethod: http.MethodPost, wantPath: "/v1/users/me/folders",
 			enqueue: func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, folderJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Account.Folders().Create(ctx, ResourceFolderCreateBody{Name: "x"}, opt)
@@ -65,7 +65,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "Folders.Update", wantMethod: http.MethodPatch, wantPath: "/v1/users/me/resource-organization/folders/" + testFolderID,
+			name: "Folders.Update", wantMethod: http.MethodPatch, wantPath: "/v1/users/me/folders/" + testFolderID,
 			enqueue: func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, folderJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				name := "y"
@@ -74,7 +74,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "Folders.Delete", wantMethod: http.MethodDelete, wantPath: "/v1/users/me/resource-organization/folders/" + testFolderID,
+			name: "Folders.Delete", wantMethod: http.MethodDelete, wantPath: "/v1/users/me/folders/" + testFolderID,
 			enqueue: func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, `{}`) },
 			invoke: func(ctx context.Context, c *Client) error {
 				return c.Account.Folders().Delete(ctx, testFolderID, opt)
@@ -83,7 +83,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.AddResource",
 			wantMethod: http.MethodPut,
-			wantPath:   "/v1/users/me/resource-organization/folders/" + testFolderID + "/resources/application/app_1",
+			wantPath:   "/v1/users/me/folders/" + testFolderID + "/resources/application/app_1",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Account.Folders().AddResource(ctx, testFolderID, WorkspaceResourceTypeApplication, "app_1", nil, opt)
@@ -93,7 +93,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.RemoveResource",
 			wantMethod: http.MethodDelete,
-			wantPath:   "/v1/users/me/resource-organization/folders/" + testFolderID + "/resources/database/db_1",
+			wantPath:   "/v1/users/me/folders/" + testFolderID + "/resources/database/db_1",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Account.Folders().RemoveResource(ctx, testFolderID, WorkspaceResourceTypeDatabase, "db_1", opt)
@@ -103,7 +103,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 		{
 			name:       "Favorites.Add",
 			wantMethod: http.MethodPut,
-			wantPath:   "/v1/users/me/resource-organization/favorites/application/app_2",
+			wantPath:   "/v1/users/me/favorites/application/app_2",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Account.Favorites().Add(ctx, WorkspaceResourceTypeApplication, "app_2", nil, opt)
@@ -113,7 +113,7 @@ func TestAccount_RouteMatrix(t *testing.T) {
 		{
 			name:       "Favorites.Remove",
 			wantMethod: http.MethodDelete,
-			wantPath:   "/v1/users/me/resource-organization/favorites/database/db_2",
+			wantPath:   "/v1/users/me/favorites/database/db_2",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Account.Favorites().Remove(ctx, WorkspaceResourceTypeDatabase, "db_2", opt)

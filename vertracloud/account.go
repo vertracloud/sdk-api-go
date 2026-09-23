@@ -191,9 +191,9 @@ type AccountUpdateBody struct {
 // ---------------------------------------------------------------------------
 
 // accountFolderPath builds
-// /v1/users/me/resource-organization/folders/:folder_id<suffix>.
+// /v1/users/me/folders/:folder_id<suffix>.
 func accountFolderPath(folderID, suffix string) string {
-	return "/v1/users/me/resource-organization/folders/" + url.PathEscape(folderID) + suffix
+	return "/v1/users/me/folders/" + url.PathEscape(folderID) + suffix
 }
 
 // ---------------------------------------------------------------------------
@@ -221,12 +221,12 @@ func (s *accountSessionsServiceImpl) List(ctx context.Context, opts ...rest.Requ
 // ---------------------------------------------------------------------------
 
 // AccountFoldersService groups the
-// /v1/users/me/resource-organization/folders* routes. Types
+// /v1/users/me/folders* routes. Types
 // (WorkspaceResourceFolder, ResourceFolderCreateBody, ...) live in
 // workspaces.go: the wire shape is identical between the personal
 // (account:write) and workspace (workspaces:write) folder routes.
 type AccountFoldersService interface {
-	// Create: POST /v1/users/me/resource-organization/folders — scope
+	// Create: POST /v1/users/me/folders — scope
 	// account:write.
 	Create(ctx context.Context, body ResourceFolderCreateBody, opts ...rest.RequestOpt) (WorkspaceResourceFolder, error)
 	// Update: PATCH .../folders/:folder_id — scope account:write.
@@ -250,7 +250,7 @@ func (f *accountFoldersServiceImpl) Create(ctx context.Context, body ResourceFol
 	if err != nil {
 		return WorkspaceResourceFolder{}, err
 	}
-	data, err := f.rest.Do(ctx, http.MethodPost, "/v1/users/me/resource-organization/folders", nil, r, "application/json", opts...)
+	data, err := f.rest.Do(ctx, http.MethodPost, "/v1/users/me/folders", nil, r, "application/json", opts...)
 	if err != nil {
 		return WorkspaceResourceFolder{}, err
 	}
@@ -301,14 +301,14 @@ func (f *accountFoldersServiceImpl) RemoveResource(ctx context.Context, folderID
 }
 
 // AccountFavoritesService groups the
-// /v1/users/me/resource-organization/favorites* routes.
+// /v1/users/me/favorites* routes.
 type AccountFavoritesService interface {
 	// Add: PUT
-	// /v1/users/me/resource-organization/favorites/:resource_type/:resource_id
+	// /v1/users/me/favorites/:resource_type/:resource_id
 	// — scope account:write. body may be nil (sent as {}).
 	Add(ctx context.Context, resourceType WorkspaceResourceType, resourceID string, body *ResourcePositionBody, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error)
 	// Remove: DELETE
-	// /v1/users/me/resource-organization/favorites/:resource_type/:resource_id
+	// /v1/users/me/favorites/:resource_type/:resource_id
 	// — scope account:write.
 	Remove(ctx context.Context, resourceType WorkspaceResourceType, resourceID string, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error)
 }
@@ -324,7 +324,7 @@ func (fav *accountFavoritesServiceImpl) Add(ctx context.Context, resourceType Wo
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err
 	}
-	path := "/v1/users/me/resource-organization/favorites/" + resourceTypeIDSuffix(resourceType, resourceID)
+	path := "/v1/users/me/favorites/" + resourceTypeIDSuffix(resourceType, resourceID)
 	data, err := fav.rest.Do(ctx, http.MethodPut, path, nil, r, "application/json", opts...)
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err
@@ -333,7 +333,7 @@ func (fav *accountFavoritesServiceImpl) Add(ctx context.Context, resourceType Wo
 }
 
 func (fav *accountFavoritesServiceImpl) Remove(ctx context.Context, resourceType WorkspaceResourceType, resourceID string, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error) {
-	path := "/v1/users/me/resource-organization/favorites/" + resourceTypeIDSuffix(resourceType, resourceID)
+	path := "/v1/users/me/favorites/" + resourceTypeIDSuffix(resourceType, resourceID)
 	data, err := fav.rest.Do(ctx, http.MethodDelete, path, nil, nil, "", opts...)
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err

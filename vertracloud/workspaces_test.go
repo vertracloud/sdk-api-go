@@ -254,7 +254,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.Create",
 			wantMethod: http.MethodPost,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/folders",
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/folders",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, folderJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Folders().Create(ctx, testWorkspaceID, ResourceFolderCreateBody{Name: "x"})
@@ -264,7 +264,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.Update",
 			wantMethod: http.MethodPatch,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/folders/" + testWSFolderID,
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/folders/" + testWSFolderID,
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, folderJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				name := "y"
@@ -275,7 +275,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.Delete",
 			wantMethod: http.MethodDelete,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/folders/" + testWSFolderID,
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/folders/" + testWSFolderID,
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, `{}`) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				return svc.Folders().Delete(ctx, testWorkspaceID, testWSFolderID)
@@ -284,7 +284,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.AddResource",
 			wantMethod: http.MethodPut,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/folders/" + testWSFolderID + "/resources/application/app_2",
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/folders/" + testWSFolderID + "/resources/application/app_2",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Folders().AddResource(ctx, testWorkspaceID, testWSFolderID, WorkspaceResourceTypeApplication, "app_2", nil)
@@ -294,7 +294,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Folders.RemoveResource",
 			wantMethod: http.MethodDelete,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/folders/" + testWSFolderID + "/resources/database/db_2",
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/folders/" + testWSFolderID + "/resources/database/db_2",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Folders().RemoveResource(ctx, testWorkspaceID, testWSFolderID, WorkspaceResourceTypeDatabase, "db_2")
@@ -304,7 +304,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Favorites.Add",
 			wantMethod: http.MethodPut,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/favorites/application/app_3",
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/favorites/application/app_3",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Favorites().Add(ctx, testWorkspaceID, WorkspaceResourceTypeApplication, "app_3", nil)
@@ -314,7 +314,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name:       "Favorites.Remove",
 			wantMethod: http.MethodDelete,
-			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/resource-organization/favorites/database/db_3",
+			wantPath:   "/v1/workspaces/" + testWorkspaceID + "/favorites/database/db_3",
 			enqueue:    func(ft *vertratest.FakeRestClient) { ft.EnqueueJSON(200, orgJSON) },
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Favorites().Remove(ctx, testWorkspaceID, WorkspaceResourceTypeDatabase, "db_3")

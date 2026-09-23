@@ -556,7 +556,7 @@ type WorkspaceRoleBody struct {
 }
 
 // ResourceFolderCreateBody is the body of POST
-// .../resource-organization/folders, shared by Account.Folders.Create and
+// .../folders, shared by Account.Folders.Create and
 // Workspaces.Folders.Create.
 type ResourceFolderCreateBody struct {
 	Name     string               `json:"name"`
@@ -589,9 +589,9 @@ func workspacePath(id, suffix string) string {
 }
 
 // workspaceFolderPath builds
-// /v1/workspaces/:id/resource-organization/folders/:folder_id<suffix>.
+// /v1/workspaces/:id/folders/:folder_id<suffix>.
 func workspaceFolderPath(workspaceID, folderID, suffix string) string {
-	return workspacePath(workspaceID, "/resource-organization/folders/"+url.PathEscape(folderID)+suffix)
+	return workspacePath(workspaceID, "/folders/"+url.PathEscape(folderID)+suffix)
 }
 
 // resourceTypeIDSuffix builds the :resource_type/:resource_id suffix
@@ -865,15 +865,15 @@ func (a *workspacesActionRequestsServiceImpl) Create(ctx context.Context, worksp
 // ---------------------------------------------------------------------------
 
 // WorkspacesFoldersService groups the
-// /v1/workspaces/:id/resource-organization/folders* routes.
+// /v1/workspaces/:id/folders* routes.
 type WorkspacesFoldersService interface {
-	// Create: POST /v1/workspaces/:id/resource-organization/folders —
+	// Create: POST /v1/workspaces/:id/folders —
 	// scope workspaces:write.
 	Create(ctx context.Context, workspaceID string, body ResourceFolderCreateBody, opts ...rest.RequestOpt) (WorkspaceResourceFolder, error)
-	// Update: PATCH .../resource-organization/folders/:folder_id — scope
+	// Update: PATCH .../folders/:folder_id — scope
 	// workspaces:write.
 	Update(ctx context.Context, workspaceID, folderID string, body ResourceFolderUpdateBody, opts ...rest.RequestOpt) (WorkspaceResourceFolder, error)
-	// Delete: DELETE .../resource-organization/folders/:folder_id — scope
+	// Delete: DELETE .../folders/:folder_id — scope
 	// workspaces:write.
 	Delete(ctx context.Context, workspaceID, folderID string, opts ...rest.RequestOpt) error
 	// AddResource: PUT
@@ -893,7 +893,7 @@ func (f *workspacesFoldersServiceImpl) Create(ctx context.Context, workspaceID s
 	if err != nil {
 		return WorkspaceResourceFolder{}, err
 	}
-	path := workspacePath(workspaceID, "/resource-organization/folders")
+	path := workspacePath(workspaceID, "/folders")
 	data, err := f.rest.Do(ctx, http.MethodPost, path, nil, r, "application/json", opts...)
 	if err != nil {
 		return WorkspaceResourceFolder{}, err
@@ -945,14 +945,14 @@ func (f *workspacesFoldersServiceImpl) RemoveResource(ctx context.Context, works
 }
 
 // WorkspacesFavoritesService groups the
-// /v1/workspaces/:id/resource-organization/favorites* routes.
+// /v1/workspaces/:id/favorites* routes.
 type WorkspacesFavoritesService interface {
 	// Add: PUT
-	// .../resource-organization/favorites/:resource_type/:resource_id —
+	// .../favorites/:resource_type/:resource_id —
 	// scope workspaces:write. body may be nil (sent as {}).
 	Add(ctx context.Context, workspaceID string, resourceType WorkspaceResourceType, resourceID string, body *ResourcePositionBody, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error)
 	// Remove: DELETE
-	// .../resource-organization/favorites/:resource_type/:resource_id —
+	// .../favorites/:resource_type/:resource_id —
 	// scope workspaces:write.
 	Remove(ctx context.Context, workspaceID string, resourceType WorkspaceResourceType, resourceID string, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error)
 }
@@ -968,7 +968,7 @@ func (fav *workspacesFavoritesServiceImpl) Add(ctx context.Context, workspaceID 
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err
 	}
-	path := workspacePath(workspaceID, "/resource-organization/favorites/"+resourceTypeIDSuffix(resourceType, resourceID))
+	path := workspacePath(workspaceID, "/favorites/"+resourceTypeIDSuffix(resourceType, resourceID))
 	data, err := fav.rest.Do(ctx, http.MethodPut, path, nil, r, "application/json", opts...)
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err
@@ -977,7 +977,7 @@ func (fav *workspacesFavoritesServiceImpl) Add(ctx context.Context, workspaceID 
 }
 
 func (fav *workspacesFavoritesServiceImpl) Remove(ctx context.Context, workspaceID string, resourceType WorkspaceResourceType, resourceID string, opts ...rest.RequestOpt) (WorkspaceResourceOrganization, error) {
-	path := workspacePath(workspaceID, "/resource-organization/favorites/"+resourceTypeIDSuffix(resourceType, resourceID))
+	path := workspacePath(workspaceID, "/favorites/"+resourceTypeIDSuffix(resourceType, resourceID))
 	data, err := fav.rest.Do(ctx, http.MethodDelete, path, nil, nil, "", opts...)
 	if err != nil {
 		return WorkspaceResourceOrganization{}, err
