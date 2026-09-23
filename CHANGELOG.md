@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/vertracloud/sdk-api-go/compare/v0.1.0...v0.1.1) (2026-09-23)
+
+
+### Bug Fixes
+
+* drop resource-organization segment from folder and favorite routes ([f73fcbf](https://github.com/vertracloud/sdk-api-go/commit/f73fcbf40bb0132b1e711344264850aa11bff8db))
+
 ## 0.1.0 (2026-09-23)
 
 
