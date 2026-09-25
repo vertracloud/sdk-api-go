@@ -231,7 +231,6 @@ type Application struct {
 	UpdatedAt           time.Time                  `json:"updated_at"`
 	MainFile            string                     `json:"main_file"`
 	Version             ApplicationVersion         `json:"version"`
-	AutoRestart         bool                       `json:"auto_restart"`
 	StartCommand        *string                    `json:"start_command"`
 	BuildCommand        *string                    `json:"build_command"`
 	OfflineSince        *time.Time                 `json:"offline_since"`
@@ -428,9 +427,6 @@ type ApplicationCreateParams struct {
 	Version ApplicationVersion
 	Start   string
 	Build   string
-	// AutoRestart controls whether the app restarts after process exit.
-	// It is sent as the multipart field "autorestart" when set.
-	AutoRestart *bool
 	// WorkspaceID associates the new app with a workspace when set.
 	WorkspaceID string
 	// Subdomain: "random" (or empty) lets the platform pick one.
@@ -459,7 +455,6 @@ type ApplicationUpdateConfigBody struct {
 	Description  *Nullable[string]    `json:"description,omitempty"`
 	MainFile     *string              `json:"main_file,omitempty"`
 	Version      *ApplicationVersion  `json:"version,omitempty"`
-	AutoRestart  *bool                `json:"auto_restart,omitempty"`
 	StartCommand *Nullable[string]    `json:"start_command,omitempty"`
 	BuildCommand *Nullable[string]    `json:"build_command,omitempty"`
 	RAM          *int                 `json:"ram,omitempty"`
@@ -628,9 +623,6 @@ func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreatePa
 	}
 	if params.Build != "" {
 		fields = append(fields, multipartField{Name: "build", Value: params.Build})
-	}
-	if params.AutoRestart != nil {
-		fields = append(fields, multipartField{Name: "autorestart", Value: strconv.FormatBool(*params.AutoRestart)})
 	}
 	if params.WorkspaceID != "" {
 		fields = append(fields, multipartField{Name: "workspace_id", Value: params.WorkspaceID})

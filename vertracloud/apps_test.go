@@ -523,7 +523,6 @@ func TestApps_Create_Multipart(t *testing.T) {
 	svc := newAppsService(fake)
 
 	note := NullableValue("prod key")
-	autoRestart := true
 	_, err := svc.Create(context.Background(), ApplicationCreateParams{
 		File:        strings.NewReader("zip-bytes"),
 		FileName:    "app.zip",
@@ -531,7 +530,6 @@ func TestApps_Create_Multipart(t *testing.T) {
 		Memory:      512,
 		Main:        "index.js",
 		Version:     "latest",
-		AutoRestart: &autoRestart,
 		WorkspaceID: "ws_1",
 		Envs:        []ApplicationEnvironmentInput{{Key: "API_KEY", Value: "secret", Note: note}},
 	})
@@ -564,9 +562,6 @@ func TestApps_Create_Multipart(t *testing.T) {
 	}
 	if fields["main"] != "index.js" {
 		t.Errorf("main field = %q, want index.js", fields["main"])
-	}
-	if fields["autorestart"] != "true" {
-		t.Errorf("autorestart field = %q, want true", fields["autorestart"])
 	}
 	if fields["workspace_id"] != "ws_1" {
 		t.Errorf("workspace_id field = %q, want ws_1", fields["workspace_id"])
