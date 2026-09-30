@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.2](https://github.com/vertracloud/sdk-api-go/compare/v0.1.1...v0.1.2) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove AutoRestart field from the application contract
+
+* release 0.1.2 ([cc4a136](https://github.com/vertracloud/sdk-api-go/commit/cc4a136fd7639ca238520860466ff8247c68fa44))
+
+
+### Features
+
+* remove AutoRestart field from the application contract ([a27ebd1](https://github.com/vertracloud/sdk-api-go/commit/a27ebd1adb708f49ed06c8527a0b38c2de14ae06))
+
 ## [0.1.1](https://github.com/vertracloud/sdk-api-go/compare/v0.1.0...v0.1.1) (2026-09-23)
 
 
