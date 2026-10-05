@@ -202,10 +202,10 @@ Each domain field of `vertracloud.Client` (`Apps`, `Databases`, …) is an inter
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
 | Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Folders()`, `.Favorites()`) | 30 |
-| Billing | `client.Billing` (+ `.Orders()`) | 5 |
+| Billing | `client.Billing` (+ `.Orders()`) | 7 |
 | Public status | `client.Status` | 1 |
 
-Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, transferring workspace ownership and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
+Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, paying by card, saved cards, automatic renewal, order receipts and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
 
 ## Versioning
 

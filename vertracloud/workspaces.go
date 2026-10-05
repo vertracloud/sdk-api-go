@@ -143,7 +143,7 @@ func (s *workspacesServiceImpl) Favorites() WorkspacesFavoritesService {
 // WorkspacePermission is one of the 18
 // granular permissions a workspace role can grant. The owner (owner_id)
 // never needs one of these — owner-only actions (rename/delete workspace,
-// transfer ownership, link/unlink a project, deploy webhook, web publish)
+// link/unlink a project, deploy webhook, web publish)
 // check owner_id directly.
 type WorkspacePermission string
 

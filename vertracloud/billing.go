@@ -12,7 +12,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// BillingService groups every /v1/orders* and /v1/redeem/:code route (5
+// BillingService groups every /v1/orders* and /v1/redeem/:code route (7
 // routes): order listing/status/creation/PIX under Orders, and Redeem as a
 // direct method (it is not nested under Orders — a redeem code is not an
 // order).
@@ -20,6 +20,12 @@ type BillingService interface {
 	// Redeem: POST /v1/redeem/:code — scope redeem:write.
 	Redeem(ctx context.Context, code string, opts ...rest.RequestOpt) (RedeemResponse, error)
 	Orders() BillingOrdersService
+	// Details: GET /v1/users/me/billing — scope billing:read. Returns nil
+	// until billing details are saved.
+	Details(ctx context.Context, opts ...rest.RequestOpt) (*BillingDetails, error)
+	// UpdateDetails: PUT /v1/users/me/billing — scope billing:write.
+	// Replaces the details; they must be complete before Orders().Create.
+	UpdateDetails(ctx context.Context, body BillingDetailsBody, opts ...rest.RequestOpt) (BillingDetails, error)
 }
 
 func newBillingService(rc rest.Client) BillingService { return &billingServiceImpl{rest: rc} }
@@ -42,6 +48,26 @@ func (s *billingServiceImpl) Redeem(ctx context.Context, code string, opts ...re
 		return RedeemResponse{}, err
 	}
 	return rest.DecodeJSON[RedeemResponse](data)
+}
+
+func (s *billingServiceImpl) Details(ctx context.Context, opts ...rest.RequestOpt) (*BillingDetails, error) {
+	data, err := s.rest.Do(ctx, http.MethodGet, "/v1/users/me/billing", nil, nil, "", opts...)
+	if err != nil {
+		return nil, err
+	}
+	return rest.DecodeJSON[*BillingDetails](data)
+}
+
+func (s *billingServiceImpl) UpdateDetails(ctx context.Context, body BillingDetailsBody, opts ...rest.RequestOpt) (BillingDetails, error) {
+	r, err := billingJSONBody(body)
+	if err != nil {
+		return BillingDetails{}, err
+	}
+	data, err := s.rest.Do(ctx, http.MethodPut, "/v1/users/me/billing", nil, r, "application/json", opts...)
+	if err != nil {
+		return BillingDetails{}, err
+	}
+	return rest.DecodeJSON[BillingDetails](data)
 }
 
 func (s *billingServiceImpl) Orders() BillingOrdersService {
@@ -77,6 +103,7 @@ type OrderProvider string
 
 const (
 	OrderProviderPix        OrderProvider = "pix"
+	OrderProviderCard       OrderProvider = "card"
 	OrderProviderRedeemCode OrderProvider = "redeem_code"
 )
 
@@ -113,6 +140,9 @@ type OrderCreateResponse struct {
 	Discount  OrderDiscount `json:"discount"`
 	Price     float64       `json:"price"`
 	ExpiresAt *time.Time    `json:"expires_at"`
+	// AllowedPaymentMethods lists how the order can be paid. Pay it with
+	// Orders().InitiatePix; card payments are made in the dashboard.
+	AllowedPaymentMethods []OrderProvider `json:"allowed_payment_methods"`
 }
 
 type OrderDiscount struct {
@@ -128,6 +158,8 @@ type OrderStatusInfo struct {
 	Status    OrderStatus  `json:"status"`
 	Price     float64      `json:"price"`
 	RelatedTo OrderRelated `json:"related_to"`
+	// AllowedPaymentMethods: same meaning as in OrderCreateResponse.
+	AllowedPaymentMethods []OrderProvider `json:"allowed_payment_methods"`
 }
 
 // OrderListItem is one entry of GET /v1/orders.
@@ -140,6 +172,8 @@ type OrderListItem struct {
 	RelatedTo OrderRelated  `json:"related_to"`
 	CreatedAt time.Time     `json:"created_at"`
 	PaidAt    *time.Time    `json:"paid_at"`
+	// HasReceipt is true when a payment receipt exists (viewable in the dashboard).
+	HasReceipt bool `json:"has_receipt"`
 }
 
 // PixQRCode is the qrcode object of PixPaymentResponse.
@@ -168,18 +202,75 @@ type RedeemResponse struct {
 	Plan RedeemPlan `json:"plan"`
 }
 
+// BillingAddress is the postal address of the billing details. Country is a
+// two-letter ISO code. In Brazil Number, District, CityCode, State and a
+// 8-digit PostalCode are required.
+type BillingAddress struct {
+	Line1      string  `json:"line1"`
+	Number     *string `json:"number"`
+	Line2      *string `json:"line2"`
+	District   *string `json:"district"`
+	City       string  `json:"city"`
+	CityCode   *string `json:"city_code"`
+	State      *string `json:"state"`
+	PostalCode *string `json:"postal_code"`
+	Country    string  `json:"country"`
+}
+
+// BillingTaxIDType is the kind of Brazilian tax document.
+type BillingTaxIDType string
+
+const (
+	BillingTaxIDTypeCPF  BillingTaxIDType = "cpf"
+	BillingTaxIDTypeCNPJ BillingTaxIDType = "cnpj"
+)
+
+// BillingTaxID is the tax document as returned by the API: masked, never the
+// full number.
+type BillingTaxID struct {
+	Type   BillingTaxIDType `json:"type"`
+	Masked string           `json:"masked"`
+}
+
+// BillingDetails is the response of GET/PUT /v1/users/me/billing. Complete is
+// true when the details are enough to create an order.
+type BillingDetails struct {
+	Name     *string         `json:"name"`
+	Address  *BillingAddress `json:"address"`
+	Phone    *string         `json:"phone"`
+	TaxID    *BillingTaxID   `json:"tax_id"`
+	Complete bool            `json:"complete"`
+}
+
 // ---------------------------------------------------------------------------
 // Request bodies
 // ---------------------------------------------------------------------------
 
 // OrderCreateBody is the body of POST
-// /v1/orders. Plan and Months are required for every order type.
+// /v1/orders. Plan and Months are required for every order type. Months is 1, 3 or 12
+// (the Economy plan only accepts 1).
 type OrderCreateBody struct {
 	Plan   string    `json:"plan"`
 	Months int       `json:"months"`
 	Coupon string    `json:"coupon,omitempty"`
 	Type   OrderType `json:"type,omitempty"`
 	Source string    `json:"source,omitempty"`
+}
+
+// BillingTaxIDBody is the tax document sent to PUT /v1/users/me/billing.
+type BillingTaxIDBody struct {
+	Type  BillingTaxIDType `json:"type"`
+	Value string           `json:"value"`
+}
+
+// BillingDetailsBody is the body of PUT /v1/users/me/billing. Phone and TaxID
+// are optional: nil omits the field (the saved value is kept), NullableNull
+// sends null (removes the saved value). Phone is E.164.
+type BillingDetailsBody struct {
+	Name    string                      `json:"name"`
+	Address BillingAddress              `json:"address"`
+	Phone   *Nullable[string]           `json:"phone,omitempty"`
+	TaxID   *Nullable[BillingTaxIDBody] `json:"tax_id,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

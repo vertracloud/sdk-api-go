@@ -117,6 +117,26 @@ func TestBilling_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "Details", wantMethod: http.MethodGet, wantPath: "/v1/users/me/billing",
+			enqueue: func(ft *vertratest.FakeRestClient) {
+				ft.EnqueueJSON(200, `{"response":{"name":"Ana","address":null,"phone":null,"tax_id":{"type":"cpf","masked":"CPF ••• 47"},"complete":false}}`)
+			},
+			invoke: func(ctx context.Context, c *Client) error {
+				_, err := c.Billing.Details(ctx, opt)
+				return err
+			},
+		},
+		{
+			name: "UpdateDetails", wantMethod: http.MethodPut, wantPath: "/v1/users/me/billing",
+			enqueue: func(ft *vertratest.FakeRestClient) {
+				ft.EnqueueJSON(200, `{"response":{"name":"Ana","address":null,"phone":null,"tax_id":null,"complete":true}}`)
+			},
+			invoke: func(ctx context.Context, c *Client) error {
+				_, err := c.Billing.UpdateDetails(ctx, BillingDetailsBody{Name: "Ana", Address: BillingAddress{Line1: "Rua A", City: "Fortaleza", Country: "BR"}}, opt)
+				return err
+			},
+		},
+		{
 			name: "Redeem", wantMethod: http.MethodPost, wantPath: "/v1/redeem/PROMO2026",
 			enqueue: func(ft *vertratest.FakeRestClient) {
 				ft.EnqueueJSON(200, `{"plan":{"name":"pro","duration":30}}`)
@@ -128,8 +148,8 @@ func TestBilling_RouteMatrix(t *testing.T) {
 		},
 	}
 
-	if len(cases) != 5 {
-		t.Fatalf("expected 5 table cases (5 billing routes), got %d", len(cases))
+	if len(cases) != 7 {
+		t.Fatalf("expected 7 table cases (7 billing routes), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
