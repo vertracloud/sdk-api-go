@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.3](https://github.com/vertracloud/sdk-api-go/compare/v0.1.2...v0.1.3) (2026-10-05)
+
+
+* release 0.1.3 ([1276150](https://github.com/vertracloud/sdk-api-go/commit/12761506fdd85276d86c2a94a836e53d057a1708))
+
+
+### Features
+
+* **billing:** billing details, card provider and new order fields ([d042196](https://github.com/vertracloud/sdk-api-go/commit/d04219681791737bb88f475708437b92a278d9a1))
+
 ## [0.1.2](https://github.com/vertracloud/sdk-api-go/compare/v0.1.1...v0.1.2) (2026-09-30)
 
 
