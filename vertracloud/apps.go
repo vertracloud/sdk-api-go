@@ -970,6 +970,8 @@ type ApplicationFileUploadParams struct {
 	// Restart, when non-nil, restarts (true) or not (false) the app after
 	// the upload lands; nil uses the API default.
 	Restart *bool
+	// Path is the destination folder inside the application; empty means the root. A ZIP is extracted into it.
+	Path string
 }
 
 // ApplicationFileUploadResponse is the successful response from POST /v1/apps/:id/files/upload.
@@ -1042,6 +1044,7 @@ func (f *appsFilesServiceImpl) Delete(ctx context.Context, id string, body Appli
 func (f *appsFilesServiceImpl) Upload(ctx context.Context, id string, params ApplicationFileUploadParams, opts ...rest.RequestOpt) (ApplicationFileUploadResponse, error) {
 	q := url.Values{}
 	addQueryBool(q, "restart", params.Restart)
+	addQueryParam(q, "path", params.Path)
 	body, contentType := newMultipartBody([]multipartField{{Name: "file", FileName: params.FileName, Reader: params.File}})
 	data, err := f.rest.Do(ctx, http.MethodPost, appPath(id, "/files/upload"), q, body, contentType, opts...)
 	if err != nil {

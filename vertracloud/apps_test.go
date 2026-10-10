@@ -643,6 +643,31 @@ func TestApps_Files_Upload_Multipart(t *testing.T) {
 	}
 }
 
+// TestApps_Files_Upload_PathQuery checks that Path travels as the "path"
+// query param and is omitted when empty.
+func TestApps_Files_Upload_PathQuery(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z"}`)
+	svc := newAppsService(fake)
+
+	if _, err := svc.Files().Upload(context.Background(), testAppID, ApplicationFileUploadParams{File: strings.NewReader("x"), FileName: "a.txt", Path: "src/lib"}); err != nil {
+		t.Fatalf("Upload with path: %v", err)
+	}
+	if _, err := svc.Files().Upload(context.Background(), testAppID, ApplicationFileUploadParams{File: strings.NewReader("x"), FileName: "a.txt"}); err != nil {
+		t.Fatalf("Upload without path: %v", err)
+	}
+	if len(fake.Requests) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(fake.Requests))
+	}
+	if got := fake.Requests[0].Query.Get("path"); got != "src/lib" {
+		t.Errorf("path query = %q, want src/lib", got)
+	}
+	if fake.Requests[1].Query.Has("path") {
+		t.Errorf("path query present when Path is empty: %q", fake.Requests[1].Query.Get("path"))
+	}
+}
+
 // TestApps_Download_Binary checks that Download streams the exact raw
 // bytes of the response body with no {"response": ...} envelope parsing.
 func TestApps_Download_Binary(t *testing.T) {
