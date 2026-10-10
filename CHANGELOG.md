@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.4](https://github.com/vertracloud/sdk-api-go/compare/v0.1.3...v0.1.4) (2026-10-10)
+
+
+* release 0.1.4 ([c7eceff](https://github.com/vertracloud/sdk-api-go/commit/c7eceffb6f381f360d76a4586ead4698a4549977))
+
+
+### Features
+
+* **apps:** add destination path option to file upload ([378f470](https://github.com/vertracloud/sdk-api-go/commit/378f4704c59b8cb4e43474661d233c98db676745))
+
 ## [0.1.3](https://github.com/vertracloud/sdk-api-go/compare/v0.1.2...v0.1.3) (2026-10-05)
 
 
