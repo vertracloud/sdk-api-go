@@ -583,7 +583,7 @@ type ApplicationFileMoveBody struct {
 type ApplicationReleasesListParams struct {
 	// Page is 1-based; 0 omits it and the API uses its default.
 	Page int
-	// Limit defaults to 20 on the API and is capped at 50; 0 omits it.
+	// Limit defaults to 20 on the API; the maximum is 50 (larger values are rejected); 0 omits it.
 	Limit       int
 	WorkspaceID string
 }
