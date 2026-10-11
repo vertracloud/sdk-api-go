@@ -15,10 +15,10 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// AppsService groups every /v1/apps/* route (36 routes: runtimes, status,
-// realtime, metrics, logs, download, deploys, network, envs, files).
+// AppsService groups every /v1/apps/* route (38 routes: runtimes, status,
+// realtime, metrics, logs, download, deploys, network, envs, files, releases).
 //
-// Nested resources (deploys, network, envs, files, and their own children)
+// Nested resources (deploys, network, envs, files, releases, and their own children)
 // are exposed as methods returning their own service interface — e.g.
 // AppsService.Deploys(), AppsNetworkService.CustomDomain() — built on
 // demand by the implementation. Construction is cheap (one struct literal),
@@ -67,6 +67,7 @@ type AppsService interface {
 	Network() AppsNetworkService
 	Envs() AppsEnvsService
 	Files() AppsFilesService
+	Releases() AppsReleasesService
 }
 
 // ApplicationRealtimeParams are the optional parameters of AppsService.Realtime.
@@ -191,6 +192,30 @@ type ApplicationShieldIncidentDirection string
 const (
 	ApplicationShieldIncidentDirectionIn  ApplicationShieldIncidentDirection = "in"
 	ApplicationShieldIncidentDirectionOut ApplicationShieldIncidentDirection = "out"
+)
+
+// ApplicationReleaseSource is how a release was created.
+type ApplicationReleaseSource string
+
+const (
+	ApplicationReleaseSourceGitHub    ApplicationReleaseSource = "github"
+	ApplicationReleaseSourceCLI       ApplicationReleaseSource = "cli"
+	ApplicationReleaseSourceUpload    ApplicationReleaseSource = "upload"
+	ApplicationReleaseSourceEditor    ApplicationReleaseSource = "editor"
+	ApplicationReleaseSourceRollback  ApplicationReleaseSource = "rollback"
+	ApplicationReleaseSourceEnvChange ApplicationReleaseSource = "env_change"
+)
+
+// ApplicationReleaseStatus is the lifecycle of a release.
+type ApplicationReleaseStatus string
+
+const (
+	ApplicationReleaseStatusDeploying  ApplicationReleaseStatus = "deploying"
+	ApplicationReleaseStatusActive     ApplicationReleaseStatus = "active"
+	ApplicationReleaseStatusSuperseded ApplicationReleaseStatus = "superseded"
+	ApplicationReleaseStatusFailed     ApplicationReleaseStatus = "failed"
+	ApplicationReleaseStatusRolledBack ApplicationReleaseStatus = "rolled_back"
+	ApplicationReleaseStatusExpired    ApplicationReleaseStatus = "expired"
 )
 
 // ---------------------------------------------------------------------------
@@ -343,6 +368,54 @@ type ApplicationDeployment struct {
 	Pusher    string    `json:"pusher"`
 	Branch    string    `json:"branch"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// ApplicationRelease is one version of an application's code, as listed by
+// AppsReleasesService.List. The list is newest first.
+type ApplicationRelease struct {
+	ID     string                   `json:"id"`
+	AppID  string                   `json:"app_id"`
+	Source ApplicationReleaseSource `json:"source"`
+	Status ApplicationReleaseStatus `json:"status"`
+	// Message is the commit or upload message; nil when none was given.
+	Message *string `json:"message"`
+	Author  string  `json:"author"`
+	// Github is the GitHub push that produced this release; nil for any other source.
+	Github       *ApplicationDeployment     `json:"github"`
+	FilesChanged int                        `json:"files_changed"`
+	Rollback     ApplicationReleaseRollback `json:"rollback"`
+	HasLog       bool                       `json:"has_log"`
+	// BuildDurationMs is nil when the release was not deployed with a build.
+	BuildDurationMs *int      `json:"build_duration_ms"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// ApplicationReleaseRollback says whether a release can be restored.
+type ApplicationReleaseRollback struct {
+	// Available is false for the active release, for an expired release, and
+	// when the plan does not allow rolling back to this release.
+	Available bool `json:"available"`
+	// ExpiresAt is when the release's code stops being kept, counted from the moment it stopped being the active release; nil for the active release and when no code was kept.
+	ExpiresAt *time.Time `json:"expires_at"`
+	// From is the release this one restores, when Source is rollback; nil otherwise.
+	From *string `json:"from"`
+}
+
+// ApplicationReleasePage is one page of AppsReleasesService.List.
+type ApplicationReleasePage struct {
+	Data            []ApplicationRelease `json:"data"`
+	TotalCount      int                  `json:"total_count"`
+	Page            int                  `json:"page"`
+	Limit           int                  `json:"limit"`
+	TotalPages      int                  `json:"total_pages"`
+	HasNextPage     bool                 `json:"has_next_page"`
+	HasPreviousPage bool                 `json:"has_previous_page"`
+}
+
+// ApplicationReleaseLog is the crash log of a release, as returned by
+// AppsReleasesService.Log. Content is nil when there is no log or it has expired.
+type ApplicationReleaseLog struct {
+	Content *string `json:"content"`
 }
 
 type ApplicationDNSRecord struct {
@@ -502,6 +575,17 @@ type ApplicationFileDeleteBody struct {
 type ApplicationFileMoveBody struct {
 	Path string `json:"path"`
 	To   string `json:"to"`
+}
+
+// ApplicationReleasesListParams contains the optional filters of AppsReleasesService.List.
+// WorkspaceID is sent the same way as rest.WithWorkspaceID; an explicit
+// rest.WithWorkspaceID option passed to List takes precedence.
+type ApplicationReleasesListParams struct {
+	// Page is 1-based; 0 omits it and the API uses its default.
+	Page int
+	// Limit defaults to 20 on the API and is capped at 50; 0 omits it.
+	Limit       int
+	WorkspaceID string
 }
 
 // ---------------------------------------------------------------------------
@@ -972,6 +1056,9 @@ type ApplicationFileUploadParams struct {
 	Restart *bool
 	// Path is the destination folder inside the application; empty means the root. A ZIP is extracted into it.
 	Path string
+	// Message is the commit message shown in the deploy history. Optional, up
+	// to 500 characters; sent only when non-empty.
+	Message string
 }
 
 // ApplicationFileUploadResponse is the successful response from POST /v1/apps/:id/files/upload.
@@ -1045,10 +1132,58 @@ func (f *appsFilesServiceImpl) Upload(ctx context.Context, id string, params App
 	q := url.Values{}
 	addQueryBool(q, "restart", params.Restart)
 	addQueryParam(q, "path", params.Path)
-	body, contentType := newMultipartBody([]multipartField{{Name: "file", FileName: params.FileName, Reader: params.File}})
+	fields := []multipartField{{Name: "file", FileName: params.FileName, Reader: params.File}}
+	if params.Message != "" {
+		fields = append(fields, multipartField{Name: "message", Value: params.Message})
+	}
+	body, contentType := newMultipartBody(fields)
 	data, err := f.rest.Do(ctx, http.MethodPost, appPath(id, "/files/upload"), q, body, contentType, opts...)
 	if err != nil {
 		return ApplicationFileUploadResponse{}, err
 	}
 	return rest.DecodeJSON[ApplicationFileUploadResponse](data)
+}
+
+// ---------------------------------------------------------------------------
+// Releases
+// ---------------------------------------------------------------------------
+
+// AppsReleasesService groups the /v1/apps/:id/releases* routes.
+type AppsReleasesService interface {
+	// List: GET /v1/apps/:id/releases — scope apps:read. Newest first.
+	List(ctx context.Context, id string, params ApplicationReleasesListParams, opts ...rest.RequestOpt) (ApplicationReleasePage, error)
+	// Log: GET /v1/apps/:id/releases/:release_id/log — scope apps:read.
+	Log(ctx context.Context, id, releaseID string, opts ...rest.RequestOpt) (ApplicationReleaseLog, error)
+}
+
+type appsReleasesServiceImpl struct{ rest rest.Client }
+
+func (s *appsServiceImpl) Releases() AppsReleasesService {
+	return &appsReleasesServiceImpl{rest: s.rest}
+}
+
+func (r *appsReleasesServiceImpl) List(ctx context.Context, id string, params ApplicationReleasesListParams, opts ...rest.RequestOpt) (ApplicationReleasePage, error) {
+	q := url.Values{}
+	if params.Page > 0 {
+		q.Set("page", strconv.Itoa(params.Page))
+	}
+	if params.Limit > 0 {
+		q.Set("limit", strconv.Itoa(params.Limit))
+	}
+	if params.WorkspaceID != "" {
+		opts = append([]rest.RequestOpt{rest.WithWorkspaceID(params.WorkspaceID)}, opts...)
+	}
+	data, err := r.rest.Do(ctx, http.MethodGet, appPath(id, "/releases"), q, nil, "", opts...)
+	if err != nil {
+		return ApplicationReleasePage{}, err
+	}
+	return rest.DecodeJSON[ApplicationReleasePage](data)
+}
+
+func (r *appsReleasesServiceImpl) Log(ctx context.Context, id, releaseID string, opts ...rest.RequestOpt) (ApplicationReleaseLog, error) {
+	data, err := r.rest.Do(ctx, http.MethodGet, appPath(id, "/releases/"+url.PathEscape(releaseID)+"/log"), nil, nil, "", opts...)
+	if err != nil {
+		return ApplicationReleaseLog{}, err
+	}
+	return rest.DecodeJSON[ApplicationReleaseLog](data)
 }

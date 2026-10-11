@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	testAppID = "app_123"
-	testEnvID = "env_456"
+	testAppID     = "app_123"
+	testEnvID     = "env_456"
+	testReleaseID = "rel_789"
 )
 
 // parseMultipartRequest decodes a captured multipart/form-data request into
@@ -69,7 +70,7 @@ func parseMultipartRequest(t *testing.T, req vertratest.CapturedCall) (fields ma
 }
 
 // TestApps_RouteMatrix checks, for every non-multipart/non-SSE/non-binary
-// route (32 of the 36), that the Go method issues the expected HTTP method
+// route (34 of the 38), that the Go method issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded correctly. Apps.Create,
 // Apps.Files().Upload, Apps.Download and Apps.Realtime are covered by their
 // own tests below.
@@ -351,10 +352,28 @@ func TestApps_RouteMatrix(t *testing.T) {
 				return svc.Files().Delete(ctx, testAppID, ApplicationFileDeleteBody{Path: "main.py"}, opts...)
 			},
 		},
+		{
+			name: "Releases.List", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/releases",
+			enqueue: func(fake *vertratest.FakeRestClient) {
+				fake.EnqueueJSON(200, `{"data":[],"total_count":0,"page":1,"limit":20,"total_pages":0,"has_next_page":false,"has_previous_page":false}`)
+			},
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Releases().List(ctx, testAppID, ApplicationReleasesListParams{}, opts...)
+				return err
+			},
+		},
+		{
+			name: "Releases.Log", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/releases/" + testReleaseID + "/log",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"content":null}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Releases().Log(ctx, testAppID, testReleaseID, opts...)
+				return err
+			},
+		},
 	}
 
-	if len(cases) != 32 {
-		t.Fatalf("expected 32 table cases (36 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
+	if len(cases) != 34 {
+		t.Fatalf("expected 34 table cases (38 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
@@ -665,6 +684,107 @@ func TestApps_Files_Upload_PathQuery(t *testing.T) {
 	}
 	if fake.Requests[1].Query.Has("path") {
 		t.Errorf("path query present when Path is empty: %q", fake.Requests[1].Query.Get("path"))
+	}
+}
+
+// TestApps_Files_Upload_Message checks that Message travels as a text part
+// only when it is non-empty.
+func TestApps_Files_Upload_Message(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z"}`)
+	svc := newAppsService(fake)
+
+	if _, err := svc.Files().Upload(context.Background(), testAppID, ApplicationFileUploadParams{File: strings.NewReader("x"), FileName: "a.zip", Message: "fix: boot"}); err != nil {
+		t.Fatalf("Upload with message: %v", err)
+	}
+	if _, err := svc.Files().Upload(context.Background(), testAppID, ApplicationFileUploadParams{File: strings.NewReader("x"), FileName: "a.zip"}); err != nil {
+		t.Fatalf("Upload without message: %v", err)
+	}
+	if len(fake.Requests) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(fake.Requests))
+	}
+
+	withFields, _, _ := parseMultipartRequest(t, fake.Requests[0])
+	if withFields["message"] != "fix: boot" {
+		t.Errorf("message field = %q, want fix: boot", withFields["message"])
+	}
+	withoutFields, _, _ := parseMultipartRequest(t, fake.Requests[1])
+	if _, ok := withoutFields["message"]; ok {
+		t.Errorf("message field present when Message is empty: %q", withoutFields["message"])
+	}
+}
+
+// TestApps_Releases_List_DecodesPage checks the page envelope decodes, that
+// page/limit are omitted when zero, and that WorkspaceID is forwarded.
+func TestApps_Releases_List_DecodesPage(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"data":[{"id":"rel_2","app_id":"app_123","source":"github","status":"active","message":"fix: boot","author":"octo","github":{"app_id":"app_123","commit_id":"abc123","message":"fix: boot","pusher":"octo","branch":"main","created_at":"2026-10-10T12:00:00.000Z"},"files_changed":3,"rollback":{"available":false,"expires_at":"2026-10-12T12:00:00.000Z","from":null},"has_log":true,"build_duration_ms":4200,"created_at":"2026-10-10T12:00:00.000Z"}],"total_count":6,"page":2,"limit":5,"total_pages":2,"has_next_page":false,"has_previous_page":true}`)
+	fake.EnqueueJSON(200, `{"data":[],"total_count":0,"page":1,"limit":20,"total_pages":0,"has_next_page":false,"has_previous_page":false}`)
+	svc := newAppsService(fake)
+
+	got, err := svc.Releases().List(context.Background(), testAppID, ApplicationReleasesListParams{Page: 2, Limit: 5, WorkspaceID: "ws_9"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got.TotalCount != 6 || got.Page != 2 || got.Limit != 5 || !got.HasPreviousPage || got.HasNextPage || len(got.Data) != 1 {
+		t.Fatalf("page = %#v", got)
+	}
+	rel := got.Data[0]
+	if rel.Source != ApplicationReleaseSourceGitHub || rel.Status != ApplicationReleaseStatusActive || rel.Message == nil || *rel.Message != "fix: boot" || rel.Github == nil || rel.Github.CommitID != "abc123" {
+		t.Fatalf("release = %#v", rel)
+	}
+	if rel.Rollback.Available || rel.Rollback.ExpiresAt == nil || rel.Rollback.From != nil || rel.FilesChanged != 3 || !rel.HasLog || rel.BuildDurationMs == nil || *rel.BuildDurationMs != 4200 {
+		t.Fatalf("release fields = %#v", rel)
+	}
+
+	if _, err := svc.Releases().List(context.Background(), testAppID, ApplicationReleasesListParams{}); err != nil {
+		t.Fatalf("List without params: %v", err)
+	}
+	if len(fake.Requests) != 2 {
+		t.Fatalf("want 2 requests, got %d", len(fake.Requests))
+	}
+	first := fake.Requests[0]
+	if first.Method != http.MethodGet || first.Path != "/v1/apps/"+testAppID+"/releases" {
+		t.Errorf("request = %s %s", first.Method, first.Path)
+	}
+	if first.Query.Get("page") != "2" || first.Query.Get("limit") != "5" {
+		t.Errorf("query = %v, want page=2&limit=5", first.Query)
+	}
+	if first.WorkspaceID != "ws_9" {
+		t.Errorf("workspace id = %q, want ws_9", first.WorkspaceID)
+	}
+	if fake.Requests[1].Query.Has("page") || fake.Requests[1].Query.Has("limit") {
+		t.Errorf("page/limit sent when zero: %v", fake.Requests[1].Query)
+	}
+}
+
+// TestApps_Releases_Log_DecodesNullableContent checks that a null content
+// decodes to nil, a string decodes to a pointer, and the release id is
+// path-escaped.
+func TestApps_Releases_Log_DecodesNullableContent(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"content":null}`)
+	fake.EnqueueJSON(200, `{"content":"boom\nstack"}`)
+	svc := newAppsService(fake)
+
+	none, err := svc.Releases().Log(context.Background(), testAppID, testReleaseID)
+	if err != nil {
+		t.Fatalf("Log: %v", err)
+	}
+	if none.Content != nil {
+		t.Fatalf("Content = %q, want nil", *none.Content)
+	}
+
+	some, err := svc.Releases().Log(context.Background(), testAppID, "rel/x")
+	if err != nil {
+		t.Fatalf("Log with content: %v", err)
+	}
+	if some.Content == nil || *some.Content != "boom\nstack" {
+		t.Fatalf("Content = %v, want boom\\nstack", some.Content)
+	}
+	if got := fake.Requests[1].Path; got != "/v1/apps/"+testAppID+"/releases/rel%2Fx/log" {
+		t.Errorf("path = %s, want escaped release id", got)
 	}
 }
 

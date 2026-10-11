@@ -197,7 +197,7 @@ Each domain field of `vertracloud.Client` (`Apps`, `Databases`, …) is an inter
 
 | Domain | Service | Routes |
 |---|---|---|
-| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`) | 36 |
+| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 38 |
 | Databases | `client.Databases` (+ `.Credentials()`) | 13 |
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
