@@ -15,7 +15,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// AppsService groups every /v1/apps/* route (38 routes: runtimes, status,
+// AppsService groups every /v1/apps/* route (40 routes: runtimes, status,
 // realtime, metrics, logs, download, deploys, network, envs, files, releases).
 //
 // Nested resources (deploys, network, envs, files, releases, and their own children)
@@ -194,6 +194,29 @@ const (
 	ApplicationShieldIncidentDirectionOut ApplicationShieldIncidentDirection = "out"
 )
 
+// ApplicationZeroDowntime is how a new deploy replaces the running version:
+// auto (without downtime only when the app receives traffic through web
+// publishing), on (always without downtime; Enterprise plan) or off (the
+// running version stops before the new one starts).
+type ApplicationZeroDowntime string
+
+const (
+	ApplicationZeroDowntimeAuto ApplicationZeroDowntime = "auto"
+	ApplicationZeroDowntimeOn   ApplicationZeroDowntime = "on"
+	ApplicationZeroDowntimeOff  ApplicationZeroDowntime = "off"
+)
+
+// ApplicationEnvironmentChange is how an environment variable would change if
+// a rollback restored the release's variables, compared with the active
+// release.
+type ApplicationEnvironmentChange string
+
+const (
+	ApplicationEnvironmentChangeAdded    ApplicationEnvironmentChange = "added"
+	ApplicationEnvironmentChangeModified ApplicationEnvironmentChange = "modified"
+	ApplicationEnvironmentChangeRemoved  ApplicationEnvironmentChange = "removed"
+)
+
 // ApplicationReleaseSource is how a release was created.
 type ApplicationReleaseSource string
 
@@ -262,6 +285,24 @@ type Application struct {
 	MissingDependencies []string                   `json:"missing_dependencies,omitempty"`
 	RemovedDirectories  []string                   `json:"removed_directories,omitempty"`
 	ShieldCooldown      *ApplicationShieldCooldown `json:"shield_cooldown"`
+	// Deploy is the deploy behavior: zero downtime, automatic rollback and health check.
+	Deploy ApplicationDeploySettings `json:"deploy"`
+}
+
+// ApplicationDeploySettings is the deploy behavior of an application. Change
+// it with AppsService.UpdateConfig (ApplicationUpdateConfigBody.Deploy).
+type ApplicationDeploySettings struct {
+	// ZeroDowntime is the saved choice; defaults to auto.
+	ZeroDowntime ApplicationZeroDowntime `json:"zero_downtime"`
+	// ZeroDowntimeActive is whether the next deploy runs without downtime.
+	ZeroDowntimeActive bool `json:"zero_downtime_active"`
+	// AutoRollback switches back to the previous version, once, when the new
+	// one stops within 60 seconds after a deploy. Acts from the Intermediary
+	// plan; the saved value is returned on any plan.
+	AutoRollback bool `json:"auto_rollback"`
+	// HealthCheckPath is the HTTP path called on the new version before it
+	// receives traffic; nil means "/".
+	HealthCheckPath *string `json:"health_check_path"`
 }
 
 type ApplicationNetwork struct {
@@ -401,6 +442,28 @@ type ApplicationReleaseRollback struct {
 	From *string `json:"from"`
 }
 
+// ApplicationEnvironmentChangeItem is one variable a rollback would change.
+// Only the name is returned, never the value.
+type ApplicationEnvironmentChangeItem struct {
+	Key    string                       `json:"key"`
+	Change ApplicationEnvironmentChange `json:"change"`
+}
+
+// ApplicationRollbackPreview is what a rollback to a release would change in
+// the environment variables, as returned by AppsReleasesService.Preview.
+// Sorted by key; empty when the release has no stored variables.
+type ApplicationRollbackPreview struct {
+	EnvironmentChanges []ApplicationEnvironmentChangeItem `json:"environment_changes"`
+}
+
+// ApplicationRollbackBody is the body of AppsReleasesService.Rollback.
+type ApplicationRollbackBody struct {
+	// RestoreEnvironment true also restores the environment variables saved
+	// with the release. nil (or false) keeps the current variables. Needs the
+	// apps:envs scope; without it the call fails with 403 API_KEY_SCOPE_DENIED.
+	RestoreEnvironment *bool `json:"restore_environment,omitempty"`
+}
+
 // ApplicationReleasePage is one page of AppsReleasesService.List.
 type ApplicationReleasePage struct {
 	Data            []ApplicationRelease `json:"data"`
@@ -532,6 +595,22 @@ type ApplicationUpdateConfigBody struct {
 	BuildCommand *Nullable[string]    `json:"build_command,omitempty"`
 	RAM          *int                 `json:"ram,omitempty"`
 	Language     *ApplicationLanguage `json:"language,omitempty"`
+	// Deploy changes the deploy behavior; nil leaves it untouched.
+	// ZeroDowntime "on" needs the Enterprise plan and AutoRollback true needs
+	// Intermediary or higher; below that the call fails with 403
+	// PLAN_DOES_NOT_SUPPORT_ZERO_DOWNTIME / PLAN_DOES_NOT_SUPPORT_AUTO_ROLLBACK.
+	Deploy *ApplicationDeploySettingsUpdate `json:"deploy,omitempty"`
+}
+
+// ApplicationDeploySettingsUpdate is the Deploy field of ApplicationUpdateConfigBody.
+// Every field is optional: nil leaves the value untouched.
+type ApplicationDeploySettingsUpdate struct {
+	ZeroDowntime *ApplicationZeroDowntime `json:"zero_downtime,omitempty"`
+	AutoRollback *bool                    `json:"auto_rollback,omitempty"`
+	// HealthCheckPath must start with "/", have at most 200 characters and be
+	// printable ASCII without spaces (percent-encode anything else). Use
+	// NullableNull to clear it (back to "/").
+	HealthCheckPath *Nullable[string] `json:"health_check_path,omitempty"`
 }
 
 // ApplicationPurgeCacheBody is the body of POST /v1/apps/:id/network/purge-cache.
@@ -1056,7 +1135,7 @@ type ApplicationFileUploadParams struct {
 	Restart *bool
 	// Path is the destination folder inside the application; empty means the root. A ZIP is extracted into it.
 	Path string
-	// Message is the commit message shown in the deploy history. Optional, up
+	// Message is the commit message shown in the release history. Optional, up
 	// to 500 characters; sent only when non-empty.
 	Message string
 }
@@ -1154,6 +1233,19 @@ type AppsReleasesService interface {
 	List(ctx context.Context, id string, params ApplicationReleasesListParams, opts ...rest.RequestOpt) (ApplicationReleasePage, error)
 	// Log: GET /v1/apps/:id/releases/:release_id/log — scope apps:read.
 	Log(ctx context.Context, id, releaseID string, opts ...rest.RequestOpt) (ApplicationReleaseLog, error)
+	// Preview: GET /v1/apps/:id/releases/:release_id/rollback — scope apps:envs.
+	// Changes nothing; returns only the names of the environment variables a
+	// rollback with RestoreEnvironment would change, never their values. Returns
+	// 403 PLAN_DOES_NOT_SUPPORT_ROLLBACK when the plan has no rollback.
+	Preview(ctx context.Context, id, releaseID string, opts ...rest.RequestOpt) (ApplicationRollbackPreview, error)
+	// Rollback: POST /v1/apps/:id/releases/:release_id/rollback — scope
+	// apps:write (plus apps:envs when body.RestoreEnvironment is true).
+	// Restores the release's code, leaves data the app created untouched and
+	// restarts the app. Returns the new release, with source "rollback".
+	// Errors: 403 PLAN_DOES_NOT_SUPPORT_ROLLBACK, 404 RELEASE_NOT_FOUND,
+	// 409 RELEASE_ALREADY_ACTIVE, 410 RELEASE_EXPIRED, 409 OPERATION_IN_PROGRESS,
+	// 429 RESTORE_COOLDOWN, 429 DEPLOY_RATE_LIMITED.
+	Rollback(ctx context.Context, id, releaseID string, body ApplicationRollbackBody, opts ...rest.RequestOpt) (ApplicationRelease, error)
 }
 
 type appsReleasesServiceImpl struct{ rest rest.Client }
@@ -1186,4 +1278,24 @@ func (r *appsReleasesServiceImpl) Log(ctx context.Context, id, releaseID string,
 		return ApplicationReleaseLog{}, err
 	}
 	return rest.DecodeJSON[ApplicationReleaseLog](data)
+}
+
+func (r *appsReleasesServiceImpl) Preview(ctx context.Context, id, releaseID string, opts ...rest.RequestOpt) (ApplicationRollbackPreview, error) {
+	data, err := r.rest.Do(ctx, http.MethodGet, appPath(id, "/releases/"+url.PathEscape(releaseID)+"/rollback"), nil, nil, "", opts...)
+	if err != nil {
+		return ApplicationRollbackPreview{}, err
+	}
+	return rest.DecodeJSON[ApplicationRollbackPreview](data)
+}
+
+func (r *appsReleasesServiceImpl) Rollback(ctx context.Context, id, releaseID string, body ApplicationRollbackBody, opts ...rest.RequestOpt) (ApplicationRelease, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return ApplicationRelease{}, fmt.Errorf("vertracloud: encode request body: %w", err)
+	}
+	data, err := r.rest.Do(ctx, http.MethodPost, appPath(id, "/releases/"+url.PathEscape(releaseID)+"/rollback"), nil, bytes.NewReader(payload), "application/json", opts...)
+	if err != nil {
+		return ApplicationRelease{}, err
+	}
+	return rest.DecodeJSON[ApplicationRelease](data)
 }

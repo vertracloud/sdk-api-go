@@ -23,6 +23,8 @@ const (
 	testReleaseID = "rel_789"
 )
 
+const rollbackReleaseJSON = `{"id":"rel_9","app_id":"app_123","source":"rollback","status":"active","message":null,"author":"octo","github":null,"files_changed":2,"rollback":{"available":false,"expires_at":null,"from":"rel_789"},"has_log":false,"build_duration_ms":null,"created_at":"2026-10-11T12:00:00.000Z"}`
+
 // parseMultipartRequest decodes a captured multipart/form-data request into
 // plain text fields and file fields, for asserting on field names/content
 // without hand-parsing MIME boundaries in every test.
@@ -70,7 +72,7 @@ func parseMultipartRequest(t *testing.T, req vertratest.CapturedCall) (fields ma
 }
 
 // TestApps_RouteMatrix checks, for every non-multipart/non-SSE/non-binary
-// route (34 of the 38), that the Go method issues the expected HTTP method
+// route (36 of the 40), that the Go method issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded correctly. Apps.Create,
 // Apps.Files().Upload, Apps.Download and Apps.Realtime are covered by their
 // own tests below.
@@ -370,10 +372,26 @@ func TestApps_RouteMatrix(t *testing.T) {
 				return err
 			},
 		},
+		{
+			name: "Releases.Preview", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/releases/" + testReleaseID + "/rollback",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"environment_changes":[]}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Releases().Preview(ctx, testAppID, testReleaseID, opts...)
+				return err
+			},
+		},
+		{
+			name: "Releases.Rollback", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/releases/" + testReleaseID + "/rollback",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, rollbackReleaseJSON) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Releases().Rollback(ctx, testAppID, testReleaseID, ApplicationRollbackBody{}, opts...)
+				return err
+			},
+		},
 	}
 
-	if len(cases) != 34 {
-		t.Fatalf("expected 34 table cases (38 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
+	if len(cases) != 36 {
+		t.Fatalf("expected 36 table cases (40 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
@@ -968,5 +986,98 @@ func TestApplicationFileContentBytes(t *testing.T) {
 	got, err := c.Bytes()
 	if err != nil || string(got) != "hi" || c.Size != 2 || c.LastModified.Year() != 2026 {
 		t.Fatalf("content = %+v, bytes = %q, err = %v", c, got, err)
+	}
+}
+
+func TestApps_Releases_Preview_DecodesChangesWithoutValues(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"environment_changes":[{"key":"A","change":"added"},{"key":"B","change":"modified"},{"key":"C","change":"removed"}]}`)
+	got, err := newAppsService(fake).Releases().Preview(context.Background(), testAppID, "rel/x", rest.WithWorkspaceID("ws_2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ApplicationEnvironmentChangeItem{
+		{"A", ApplicationEnvironmentChangeAdded}, {"B", ApplicationEnvironmentChangeModified}, {"C", ApplicationEnvironmentChangeRemoved},
+	}
+	if !reflect.DeepEqual(got.EnvironmentChanges, want) {
+		t.Fatalf("changes = %#v", got.EnvironmentChanges)
+	}
+	req := fake.Requests[0]
+	if req.Path != "/v1/apps/"+testAppID+"/releases/rel%2Fx/rollback" || req.WorkspaceID != "ws_2" {
+		t.Errorf("request = %s ws=%q query=%v", req.Path, req.WorkspaceID, req.Query)
+	}
+}
+
+func TestApps_Releases_Rollback_Body(t *testing.T) {
+	yes, no := true, false
+	for _, tc := range []struct {
+		name string
+		body ApplicationRollbackBody
+		want string
+	}{
+		{"absent", ApplicationRollbackBody{}, `{}`},
+		{"true", ApplicationRollbackBody{RestoreEnvironment: &yes}, `{"restore_environment":true}`},
+		{"false", ApplicationRollbackBody{RestoreEnvironment: &no}, `{"restore_environment":false}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, rollbackReleaseJSON)
+			rel, err := newAppsService(fake).Releases().Rollback(context.Background(), testAppID, testReleaseID, tc.body, rest.WithWorkspaceID("ws_3"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := fake.Requests[0]
+			if string(req.Body) != tc.want || req.ContentType != "application/json" || req.WorkspaceID != "ws_3" {
+				t.Errorf("body=%s ct=%q ws=%q, want body %s", req.Body, req.ContentType, req.WorkspaceID, tc.want)
+			}
+			if rel.Source != ApplicationReleaseSourceRollback || rel.Rollback.From == nil || *rel.Rollback.From != testReleaseID {
+				t.Errorf("release = %#v", rel)
+			}
+		})
+	}
+}
+
+func TestApps_Application_DecodesDeploy(t *testing.T) {
+	var app Application
+	if err := json.Unmarshal([]byte(`{"deploy":{"zero_downtime":"on","zero_downtime_active":true,"auto_rollback":true,"health_check_path":"/up"}}`), &app); err != nil {
+		t.Fatal(err)
+	}
+	d := app.Deploy
+	if d.ZeroDowntime != ApplicationZeroDowntimeOn || !d.ZeroDowntimeActive || !d.AutoRollback || d.HealthCheckPath == nil || *d.HealthCheckPath != "/up" {
+		t.Fatalf("deploy = %#v", d)
+	}
+	app = Application{}
+	if err := json.Unmarshal([]byte(`{"deploy":{"zero_downtime":"auto","zero_downtime_active":false,"auto_rollback":false,"health_check_path":null}}`), &app); err != nil {
+		t.Fatal(err)
+	}
+	if app.Deploy.ZeroDowntime != ApplicationZeroDowntimeAuto || app.Deploy.HealthCheckPath != nil {
+		t.Fatalf("deploy = %#v", app.Deploy)
+	}
+}
+
+func TestApps_UpdateConfig_DeployAbsentNullValue(t *testing.T) {
+	off, no := ApplicationZeroDowntimeOff, false
+	for _, tc := range []struct {
+		name string
+		body ApplicationUpdateConfigBody
+		want string
+	}{
+		{"deploy absent", ApplicationUpdateConfigBody{}, `{}`},
+		{"empty deploy", ApplicationUpdateConfigBody{Deploy: &ApplicationDeploySettingsUpdate{}}, `{"deploy":{}}`},
+		{"path absent", ApplicationUpdateConfigBody{Deploy: &ApplicationDeploySettingsUpdate{ZeroDowntime: &off, AutoRollback: &no}}, `{"deploy":{"zero_downtime":"off","auto_rollback":false}}`},
+		{"path null", ApplicationUpdateConfigBody{Deploy: &ApplicationDeploySettingsUpdate{HealthCheckPath: NullableNull[string]()}}, `{"deploy":{"health_check_path":null}}`},
+		{"path value", ApplicationUpdateConfigBody{Deploy: &ApplicationDeploySettingsUpdate{HealthCheckPath: NullableValue("/health")}}, `{"deploy":{"health_check_path":"/health"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, `"success"`)
+			if _, err := newAppsService(fake).UpdateConfig(context.Background(), testAppID, tc.body); err != nil {
+				t.Fatal(err)
+			}
+			req := fake.Requests[0]
+			if req.Method != http.MethodPatch || string(req.Body) != tc.want {
+				t.Errorf("%s body=%s, want %s", req.Method, req.Body, tc.want)
+			}
+		})
 	}
 }

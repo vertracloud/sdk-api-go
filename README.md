@@ -109,7 +109,23 @@ _, err = client.Apps.Restart(ctx, appID, &vertracloud.ApplicationRestartBody{Rei
 
 metrics, err := client.Apps.Metrics(ctx, appID, &vertracloud.ApplicationMetricsParams{Range: "24h"})
 logs, err := client.Apps.Logs(ctx, appID)
+
+// Releases and rollback
+page, err := client.Apps.Releases().List(ctx, appID, vertracloud.ApplicationReleasesListParams{})
+preview, err := client.Apps.Releases().Preview(ctx, appID, releaseID) // scope apps:envs
+rel, err := client.Apps.Releases().Rollback(ctx, appID, releaseID, vertracloud.ApplicationRollbackBody{}) // scope apps:write
+
+// Deploy behavior (health_check_path: NullableNull clears it)
+off := vertracloud.ApplicationZeroDowntimeOff
+_, err = client.Apps.UpdateConfig(ctx, appID, vertracloud.ApplicationUpdateConfigBody{
+	Deploy: &vertracloud.ApplicationDeploySettingsUpdate{
+		ZeroDowntime:    &off,
+		HealthCheckPath: vertracloud.NullableValue("/health"),
+	},
+})
 ```
+
+`Releases().Preview` returns only the names of the environment variables a rollback would change (`added`, `modified` or `removed`), never their values. To also restore the variables saved with the release, set `RestoreEnvironment` in `ApplicationRollbackBody`; that needs the `apps:envs` scope as well (without it the call fails with 403 `API_KEY_SCOPE_DENIED`). Error codes such as `RELEASE_EXPIRED` or `RESTORE_COOLDOWN` arrive in `APIError.Code` as plain strings.
 
 Public payloads, enums, and input types use the `Application` prefix. Input
 types end in `Params` for query/options/multipart values and `Body` for JSON
@@ -197,7 +213,7 @@ Each domain field of `vertracloud.Client` (`Apps`, `Databases`, …) is an inter
 
 | Domain | Service | Routes |
 |---|---|---|
-| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 38 |
+| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 40 |
 | Databases | `client.Databases` (+ `.Credentials()`) | 13 |
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
