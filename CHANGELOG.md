@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.5](https://github.com/vertracloud/sdk-api-go/compare/v0.1.4...v0.1.5) (2026-10-12)
+
+
+### Features
+
+* **apps:** add FirstStartedAt to Release ([f03bf54](https://github.com/vertracloud/sdk-api-go/commit/f03bf54f611a3d2549b5e0d05304b5298bd5cfca))
+* **apps:** release history and upload message ([eebe958](https://github.com/vertracloud/sdk-api-go/commit/eebe9581c47cfb5fa64fec043ce5b260b6e41c2b))
+* **apps:** rollback preview, rollback and deploy settings ([db5c72f](https://github.com/vertracloud/sdk-api-go/commit/db5c72fe2e0b30f6bf3c5443023fc240badb148c))
+
 ## [0.1.4](https://github.com/vertracloud/sdk-api-go/compare/v0.1.3...v0.1.4) (2026-10-10)
 
 
