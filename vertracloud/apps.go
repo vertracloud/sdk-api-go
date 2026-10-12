@@ -427,8 +427,11 @@ type ApplicationRelease struct {
 	Rollback     ApplicationReleaseRollback `json:"rollback"`
 	HasLog       bool                       `json:"has_log"`
 	// BuildDurationMs is nil when the release was not deployed with a build.
-	BuildDurationMs *int      `json:"build_duration_ms"`
-	CreatedAt       time.Time `json:"created_at"`
+	BuildDurationMs *int `json:"build_duration_ms"`
+	// FirstStartedAt is nil while the release's code is in the app folder but the app has not
+	// been restarted with it yet.
+	FirstStartedAt *time.Time `json:"first_started_at"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 // ApplicationReleaseRollback says whether a release can be restored.

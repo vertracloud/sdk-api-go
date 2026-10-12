@@ -23,7 +23,7 @@ const (
 	testReleaseID = "rel_789"
 )
 
-const rollbackReleaseJSON = `{"id":"rel_9","app_id":"app_123","source":"rollback","status":"active","message":null,"author":"octo","github":null,"files_changed":2,"rollback":{"available":false,"expires_at":null,"from":"rel_789"},"has_log":false,"build_duration_ms":null,"created_at":"2026-10-11T12:00:00.000Z"}`
+const rollbackReleaseJSON = `{"id":"rel_9","app_id":"app_123","source":"rollback","status":"active","message":null,"author":"octo","github":null,"files_changed":2,"rollback":{"available":false,"expires_at":null,"from":"rel_789"},"has_log":false,"build_duration_ms":null,"first_started_at":"2026-10-11T12:00:00.000Z","created_at":"2026-10-11T12:00:00.000Z"}`
 
 // parseMultipartRequest decodes a captured multipart/form-data request into
 // plain text fields and file fields, for asserting on field names/content
@@ -737,7 +737,7 @@ func TestApps_Files_Upload_Message(t *testing.T) {
 // page/limit are omitted when zero, and that WorkspaceID is forwarded.
 func TestApps_Releases_List_DecodesPage(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"data":[{"id":"rel_2","app_id":"app_123","source":"github","status":"active","message":"fix: boot","author":"octo","github":{"app_id":"app_123","commit_id":"abc123","message":"fix: boot","pusher":"octo","branch":"main","created_at":"2026-10-10T12:00:00.000Z"},"files_changed":3,"rollback":{"available":false,"expires_at":"2026-10-12T12:00:00.000Z","from":null},"has_log":true,"build_duration_ms":4200,"created_at":"2026-10-10T12:00:00.000Z"}],"total_count":6,"page":2,"limit":5,"total_pages":2,"has_next_page":false,"has_previous_page":true}`)
+	fake.EnqueueJSON(200, `{"data":[{"id":"rel_2","app_id":"app_123","source":"github","status":"active","message":"fix: boot","author":"octo","github":{"app_id":"app_123","commit_id":"abc123","message":"fix: boot","pusher":"octo","branch":"main","created_at":"2026-10-10T12:00:00.000Z"},"files_changed":3,"rollback":{"available":false,"expires_at":"2026-10-12T12:00:00.000Z","from":null},"has_log":true,"build_duration_ms":4200,"first_started_at":null,"created_at":"2026-10-10T12:00:00.000Z"}],"total_count":6,"page":2,"limit":5,"total_pages":2,"has_next_page":false,"has_previous_page":true}`)
 	fake.EnqueueJSON(200, `{"data":[],"total_count":0,"page":1,"limit":20,"total_pages":0,"has_next_page":false,"has_previous_page":false}`)
 	svc := newAppsService(fake)
 
