@@ -109,7 +109,7 @@ func TestBilling_RouteMatrix(t *testing.T) {
 		{
 			name: "Orders.InitiatePix", wantMethod: http.MethodPost, wantPath: "/v1/orders/" + testOrderID + "/initiate/pix",
 			enqueue: func(ft *vertratest.FakeRestClient) {
-				ft.EnqueueJSON(200, `{"transaction_amount":19.9,"external_reference":null,"txid":"tx1","qrcode":{"copy":"000201","base64":"aGVsbG8="}}`)
+				ft.EnqueueJSON(200, `{"transaction_amount":19.9,"external_reference":null,"txid":"tx1","qrcode":{"copy":"000201","base64":"aGVsbG8="},"expires_at":"2026-10-13T12:30:00.000Z"}`)
 			},
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Billing.Orders().InitiatePix(ctx, testOrderID, opt)
@@ -242,12 +242,15 @@ func TestBilling_Orders_Create_Body(t *testing.T) {
 // in related_to.
 func TestBilling_Orders_Status_Decode(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro","months":1}}}`)
+	fake.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro","months":1}},"expires_at":"2026-10-16T12:00:00.000Z"}`)
 	svc := newBillingService(fake)
 
 	got, err := svc.Orders().Status(context.Background(), testOrderID)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
+	}
+	if got.ExpiresAt == nil || got.ExpiresAt.IsZero() {
+		t.Errorf("ExpiresAt = %v, want a timestamp", got.ExpiresAt)
 	}
 	if got.RelatedTo.Plan.Name != "pro" || got.RelatedTo.Plan.Months != 1 {
 		t.Errorf("RelatedTo.Plan = %+v, want pro/1", got.RelatedTo.Plan)

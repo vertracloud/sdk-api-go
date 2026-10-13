@@ -160,6 +160,8 @@ type OrderStatusInfo struct {
 	RelatedTo OrderRelated `json:"related_to"`
 	// AllowedPaymentMethods: same meaning as in OrderCreateResponse.
 	AllowedPaymentMethods []OrderProvider `json:"allowed_payment_methods"`
+	// ExpiresAt is when the unpaid order (invoice) expires, nil when not set.
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 // OrderListItem is one entry of GET /v1/orders.
@@ -188,6 +190,8 @@ type PixPaymentResponse struct {
 	ExternalReference *string   `json:"external_reference"`
 	TxID              string    `json:"txid"`
 	QRCode            PixQRCode `json:"qrcode"`
+	// ExpiresAt is when this Pix QR code stops being payable, nil when not set.
+	ExpiresAt *time.Time `json:"expires_at"`
 }
 
 // RedeemPlan is the plan object of RedeemResponse.
