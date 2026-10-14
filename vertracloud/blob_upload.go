@@ -163,7 +163,7 @@ func (b *BlobClient) runUpload(ctx context.Context, up BlobUpload, r io.Reader, 
 	var err error
 	switch up.Mode {
 	case BlobUploadModeSingle:
-		// ponytail: no retry on the single PUT (a stream cannot rewind); Resume re-sends it.
+		// No retry on the single PUT (a stream cannot rewind); Resume re-sends it.
 		cr := &countReader{r: io.LimitReader(r, up.Size), p: prog}
 		err = b.putTo(ctx, up.URL, up.Headers, cr, up.Size)
 	case BlobUploadModeMultipart:
