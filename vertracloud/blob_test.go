@@ -599,10 +599,13 @@ func TestBlobObjectRoutes(t *testing.T) {
 	if err := c.Shares.Revoke(ctx, "s1"); err != nil || last().Path != "/v1/shares/s1" {
 		t.Fatal(err)
 	}
-	if d, err := c.Domains.Add(ctx, "cdn.x.com", "img/"); err != nil || d.Hostname != "cdn.x.com" || d.Verification == nil || d.Verification.Name != "_vertra.cdn.x.com" || d.Verification.Value != "abc" || string(last().Body) != `{"hostname":"cdn.x.com","prefix":"img/"}` {
+	if d, err := c.Domains.Add(ctx, "cdn.x.com", "img/", true); err != nil || d.Hostname != "cdn.x.com" || d.Verification == nil || d.Verification.Name != "_vertra.cdn.x.com" || d.Verification.Value != "abc" || string(last().Body) != `{"hostname":"cdn.x.com","prefix":"img/","web_content":true}` {
 		t.Fatalf("domain add %v %s", err, last().Body)
 	}
 	c.Domains.List(ctx)
+	if _, err := c.Domains.Update(ctx, "d1", false); err != nil || last().Method != "PATCH" || last().Path != "/v1/domains/d1" || string(last().Body) != `{"web_content":false}` {
+		t.Fatalf("domain update %v %s", err, last().Body)
+	}
 	if d, err := c.Domains.Verify(ctx, "d1"); err != nil || d.Status != "active" || last().Path != "/v1/domains/d1/verify" || last().Method != "POST" {
 		t.Fatal(err)
 	}

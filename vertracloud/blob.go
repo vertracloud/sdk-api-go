@@ -229,6 +229,8 @@ type BlobCustomDomain struct {
 	SSLStatus   string  `json:"ssl_status"`
 	CNAMETarget string  `json:"cname_target"`
 	Prefix      *string `json:"prefix"`
+	// WebContent: true serves .html, .htm, .xhtml, .svg and .xml in the browser (sandboxed); false always downloads.
+	WebContent bool `json:"web_content"`
 	// Verification is set only while the domain is not active.
 	Verification *BlobDomainVerification `json:"verification,omitempty"`
 	CreatedAt    time.Time               `json:"created_at"`
@@ -356,7 +358,9 @@ type BlobRulesService interface {
 type BlobDomainsService interface {
 	List(ctx context.Context, opts ...rest.RequestOpt) ([]BlobCustomDomain, error)
 	// Add registers hostname; prefix (optional) restricts it to one folder.
-	Add(ctx context.Context, hostname, prefix string, opts ...rest.RequestOpt) (BlobCustomDomain, error)
+	Add(ctx context.Context, hostname, prefix string, webContent bool, opts ...rest.RequestOpt) (BlobCustomDomain, error)
+	// Update changes whether the domain serves web content (HTML, SVG, XML) in the browser.
+	Update(ctx context.Context, domainID string, webContent bool, opts ...rest.RequestOpt) (BlobCustomDomain, error)
 	Verify(ctx context.Context, domainID string, opts ...rest.RequestOpt) (BlobCustomDomain, error)
 	Delete(ctx context.Context, domainID string, opts ...rest.RequestOpt) error
 }
@@ -683,11 +687,18 @@ func (d *blobDomains) List(ctx context.Context, opts ...rest.RequestOpt) ([]Blob
 	return blobCall[[]BlobCustomDomain](ctx, d.b, http.MethodGet, "/domains", nil, nil, opts)
 }
 
-func (d *blobDomains) Add(ctx context.Context, hostname, prefix string, opts ...rest.RequestOpt) (BlobCustomDomain, error) {
+func (d *blobDomains) Add(ctx context.Context, hostname, prefix string, webContent bool, opts ...rest.RequestOpt) (BlobCustomDomain, error) {
 	return blobCall[BlobCustomDomain](ctx, d.b, http.MethodPost, "/domains", nil, struct {
-		Hostname string `json:"hostname"`
-		Prefix   string `json:"prefix,omitempty"`
-	}{hostname, prefix}, opts)
+		Hostname   string `json:"hostname"`
+		Prefix     string `json:"prefix,omitempty"`
+		WebContent bool   `json:"web_content,omitempty"`
+	}{hostname, prefix, webContent}, opts)
+}
+
+func (d *blobDomains) Update(ctx context.Context, domainID string, webContent bool, opts ...rest.RequestOpt) (BlobCustomDomain, error) {
+	return blobCall[BlobCustomDomain](ctx, d.b, http.MethodPatch, "/domains/"+url.PathEscape(domainID), nil, struct {
+		WebContent bool `json:"web_content"`
+	}{webContent}, opts)
 }
 
 func (d *blobDomains) Verify(ctx context.Context, domainID string, opts ...rest.RequestOpt) (BlobCustomDomain, error) {
