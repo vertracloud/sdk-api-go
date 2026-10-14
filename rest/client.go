@@ -95,6 +95,21 @@ func WithUserAgent(ua string) ClientOpt {
 	}
 }
 
+// BaseURLCloner is implemented by the clients built by NewClient and
+// NewPublicClient. CloneWithBaseURL returns a client that shares every
+// setting (API key, HTTP client, timeout, User-Agent) but targets baseURL.
+// The Blob Storage service uses it to reach its own host.
+type BaseURLCloner interface {
+	CloneWithBaseURL(baseURL string) Client
+}
+
+// CloneWithBaseURL implements BaseURLCloner.
+func (c *client) CloneWithBaseURL(baseURL string) Client {
+	clone := *c
+	clone.baseURL = strings.TrimRight(baseURL, "/")
+	return &clone
+}
+
 // client is the only implementation of Client in this package.
 type client struct {
 	apiKey     string

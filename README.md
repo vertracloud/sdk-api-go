@@ -209,6 +209,35 @@ Other predicates: `IsAuthenticationError` (401), `IsPermissionError` (403 — in
 
 Each domain field of `vertracloud.Client` (`Apps`, `Databases`, …) is an interface, so you can replace it with a mock. Embed the interface in your mock and override only what you use — new methods may be added in minor releases.
 
+### Blob Storage
+
+`client.Blob` talks to the Blob Storage API (`https://blob.vertracloud.app/v1`; change it with
+`vertracloud.WithBlobBaseURL`). It needs an API key with `blob:read` / `blob:write`.
+
+```go
+f, _ := os.Open("logo.png")
+st, _ := f.Stat()
+obj, err := client.Blob.Put(ctx, "images/logo.png", f, st.Size(), &vertracloud.BlobPutOptions{
+	Visibility: vertracloud.BlobVisibilityPublic,
+	OnProgress: func(loaded, total int64) { fmt.Printf("%d/%d\n", loaded, total) },
+})
+
+it := client.Blob.List(ctx, &vertracloud.BlobListOptions{Prefix: "images/"})
+for it.Next(ctx) {
+	fmt.Println(it.Object().Path)
+}
+if err := it.Err(); err != nil { /* ... */ }
+
+dl, _ := client.Blob.DownloadURL(ctx, obj.ID, &vertracloud.BlobDownloadOptions{ExpiresIn: 600})
+_, _ = client.Blob.DeleteMany(ctx, vertracloud.BlobDeleteManyOptions{Prefix: "tmp/"})
+```
+
+`Put` sends files up to 5 MB in one request and larger ones directly to storage, in parts in parallel
+(`BlobPutOptions.Concurrency`, default 4, when the reader is an `io.ReaderAt` such as `*os.File`). Cancelling
+the context aborts the upload; `Resume(ctx, uploadID, reader, nil)` continues an interrupted one.
+Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`, `CreateUploadToken`,
+`S3Credentials`, `Shares`, `Rules` and `Domains`. Pass `rest.WithWorkspaceID` to act on a workspace owner's blob.
+
 ## Coverage
 
 | Domain | Service | Routes |
