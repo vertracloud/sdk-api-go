@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/vertracloud/sdk-api-go/compare/v0.2.0...v0.2.1) (2026-10-15)
+
+
+### Features
+
+* **blob:** add RenameOnConflict to Put and Copy ([196985d](https://github.com/vertracloud/sdk-api-go/commit/196985d585a621ae672ab42b1e66e1a4020c926a))
+
 ## [0.2.0](https://github.com/vertracloud/sdk-api-go/compare/v0.1.5...v0.2.0) (2026-10-15)
 
 
