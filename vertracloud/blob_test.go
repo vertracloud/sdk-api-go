@@ -99,6 +99,18 @@ func TestBlobDefaultsAndAuth(t *testing.T) {
 	}
 }
 
+func TestBlobPutRenameOnConflict(t *testing.T) {
+	f := newBlobFake(t, func(w http.ResponseWriter, r *http.Request, _ []byte) { objResp(w) })
+	c := f.client(t)
+	yes := true
+	if _, err := c.Put(context.Background(), "a/b.txt", strings.NewReader("abc"), 3, &BlobPutOptions{RenameOnConflict: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	if q := f.find("POST", "/v1/objects")[0].Query; len(q["rename_on_conflict"]) != 1 || q["rename_on_conflict"][0] != "true" {
+		t.Fatalf("query %v", q)
+	}
+}
+
 func TestBlobPutSimple(t *testing.T) {
 	f := newBlobFake(t, func(w http.ResponseWriter, r *http.Request, _ []byte) { objResp(w) })
 	c := f.client(t)
@@ -569,6 +581,10 @@ func TestBlobObjectRoutes(t *testing.T) {
 	c.Copy(ctx, "1", "b/c.txt", &BlobCopyOptions{Overwrite: &over})
 	if last().Path != "/v1/objects/copy" || body()["move"] != nil || body()["source"] != "1" || body()["overwrite"] != true {
 		t.Fatalf("copy %s", last().Body)
+	}
+	c.Copy(ctx, "1", "b/c.txt", &BlobCopyOptions{RenameOnConflict: &over})
+	if body()["rename_on_conflict"] != true || body()["overwrite"] != nil {
+		t.Fatalf("copy rename %s", last().Body)
 	}
 	c.Move(ctx, "1", "b/c.txt", nil)
 	if body()["move"] != true {

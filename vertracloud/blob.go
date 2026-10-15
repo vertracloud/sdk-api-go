@@ -242,9 +242,12 @@ type BlobCustomDomain struct {
 
 // BlobPutOptions are the options of Put and Resume. Every field is optional.
 type BlobPutOptions struct {
-	Visibility         BlobVisibility
-	Overwrite          *bool
-	RandomSuffix       *bool
+	Visibility   BlobVisibility
+	Overwrite    *bool
+	RandomSuffix *bool
+	// RenameOnConflict saves a taken path as name-1.ext, name-2.ext, … instead
+	// of failing; the returned object has the final path. Not with Overwrite.
+	RenameOnConflict   *bool
 	CacheControl       string
 	ContentDisposition BlobContentDisposition
 	Filename           string
@@ -289,7 +292,10 @@ type BlobUpdate struct {
 type BlobCopyOptions struct {
 	Overwrite    *bool
 	RandomSuffix *bool
-	Visibility   BlobVisibility
+	// RenameOnConflict (Copy only, ignored by Move) saves a taken path, even the
+	// source's own, as name-1.ext, name-2.ext, … Not with Overwrite.
+	RenameOnConflict *bool
+	Visibility       BlobVisibility
 }
 
 // BlobDeleteManyOptions selects what DeleteMany removes: IDs or Prefix.
@@ -466,10 +472,11 @@ func (b *BlobClient) copyOrMove(ctx context.Context, id, path string, move bool,
 		Move         bool           `json:"move,omitempty"`
 		Overwrite    *bool          `json:"overwrite,omitempty"`
 		RandomSuffix *bool          `json:"random_suffix,omitempty"`
+		Rename       *bool          `json:"rename_on_conflict,omitempty"`
 		Visibility   BlobVisibility `json:"visibility,omitempty"`
 	}{Source: id, Path: path, Move: move}
 	if o != nil {
-		body.Overwrite, body.RandomSuffix, body.Visibility = o.Overwrite, o.RandomSuffix, o.Visibility
+		body.Overwrite, body.RandomSuffix, body.Rename, body.Visibility = o.Overwrite, o.RandomSuffix, o.RenameOnConflict, o.Visibility
 	}
 	return blobCall[BlobObject](ctx, b, http.MethodPost, "/objects/copy", nil, body, opts)
 }

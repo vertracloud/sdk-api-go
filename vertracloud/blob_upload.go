@@ -113,13 +113,14 @@ func (o *BlobPutOptions) uploadBody(path string, size int64) any {
 		Visibility         BlobVisibility         `json:"visibility,omitempty"`
 		Overwrite          *bool                  `json:"overwrite,omitempty"`
 		RandomSuffix       *bool                  `json:"random_suffix,omitempty"`
+		RenameOnConflict   *bool                  `json:"rename_on_conflict,omitempty"`
 		CacheControl       string                 `json:"cache_control,omitempty"`
 		ContentDisposition BlobContentDisposition `json:"content_disposition,omitempty"`
 		Filename           string                 `json:"filename,omitempty"`
 		ExpiresAt          *time.Time             `json:"expires_at,omitempty"`
 		ChecksumSHA256     string                 `json:"checksum_sha256,omitempty"`
 		Metadata           map[string]string      `json:"metadata,omitempty"`
-	}{path, size, o.Visibility, o.Overwrite, o.RandomSuffix, o.CacheControl, o.ContentDisposition, o.Filename, o.ExpiresAt, o.ChecksumSHA256, o.Metadata}
+	}{path, size, o.Visibility, o.Overwrite, o.RandomSuffix, o.RenameOnConflict, o.CacheControl, o.ContentDisposition, o.Filename, o.ExpiresAt, o.ChecksumSHA256, o.Metadata}
 }
 
 func (b *BlobClient) putSimple(ctx context.Context, p string, r io.Reader, size int64, o *BlobPutOptions, prog *blobProgress, opts []rest.RequestOpt) (BlobObject, error) {
@@ -127,6 +128,7 @@ func (b *BlobClient) putSimple(ctx context.Context, p string, r io.Reader, size 
 	addQueryParam(q, "visibility", string(o.Visibility))
 	addQueryBool(q, "overwrite", o.Overwrite)
 	addQueryBool(q, "random_suffix", o.RandomSuffix)
+	addQueryBool(q, "rename_on_conflict", o.RenameOnConflict)
 	addQueryParam(q, "cache_control", o.CacheControl)
 	addQueryParam(q, "content_disposition", string(o.ContentDisposition))
 	addQueryParam(q, "filename", o.Filename)
