@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0](https://github.com/vertracloud/sdk-api-go/compare/v0.1.5...v0.2.0) (2026-10-15)
+
+
+### Features
+
+* add Blob Storage client ([c2426d4](https://github.com/vertracloud/sdk-api-go/commit/c2426d47f4c6cb4e9f40d035ae43024006636348))
+* add ExpiresAt to Pix payment and order status ([d5f2594](https://github.com/vertracloud/sdk-api-go/commit/d5f25940708cf0fc28cb24d104f3766530e56996))
+* web_content on blob custom domains ([4c9f77d](https://github.com/vertracloud/sdk-api-go/commit/4c9f77ddea03f3d71b4b7620454cc931124aecf2))
+
 ## [0.1.5](https://github.com/vertracloud/sdk-api-go/compare/v0.1.4...v0.1.5) (2026-10-12)
 
 
