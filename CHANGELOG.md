@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/vertracloud/sdk-api-go/compare/v0.2.1...v0.2.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **apps:** support async app creation with building status and WaitUntilReady ([53bc8f8](https://github.com/vertracloud/sdk-api-go/commit/53bc8f88de74394651e6528455bfbb79a9f0bc24))
+
 ## [0.2.1](https://github.com/vertracloud/sdk-api-go/compare/v0.2.0...v0.2.1) (2026-10-15)
 
 
