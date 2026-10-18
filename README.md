@@ -163,6 +163,26 @@ _, err = io.Copy(out, zip)
 
 `client.Snapshots.Download` works the same way.
 
+### Waiting for the first build
+
+`Apps.Create` returns right away with `Status` `ApplicationStatusBuilding`. Follow the build with `WaitUntilReady`, bounded by `ctx`:
+
+```go
+ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+defer cancel()
+ready, err := client.Apps.WaitUntilReady(ctx, app.ID, &vertracloud.WaitOptions{Interval: 2 * time.Second})
+var down *vertracloud.AppNotReadyError
+if errors.As(err, &down) {
+	// The build ended "down". down.Code is App.LastBuildError (e.g. INSTALL_OUT_OF_MEMORY),
+	// or "APP_DOWN" when the API sent none. Read Apps.Logs for the cause.
+}
+_ = ready
+```
+
+While the app is `building`, actions that build or change it fail with 409 `APP_BUILDING` (`APIError.Code`); deleting is allowed.
+
+`MissingDependencies` is filled only after the build ends.
+
 ### Realtime logs (SSE)
 
 ```go

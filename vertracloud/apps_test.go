@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -473,15 +474,39 @@ func TestApps_RealtimeEventUsesContractEnum(t *testing.T) {
 	}
 }
 
-func TestApps_CreatePreservesRemovedDirectories(t *testing.T) {
+func TestApps_WaitUntilReady(t *testing.T) {
+	fast := &WaitOptions{Interval: time.Millisecond}
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(201, `{"id":"app-1","name":"demo","removed_directories":[".cache"]}`)
-	app, err := newAppsService(fake).Create(context.Background(), ApplicationCreateParams{Name: "demo"})
-	if err != nil {
-		t.Fatal(err)
+	fake.EnqueueJSON(200, `{"id":"app-1","status":"building"}`)
+	fake.EnqueueJSON(200, `{"id":"app-1","status":"up"}`)
+	app, err := newAppsService(fake).WaitUntilReady(context.Background(), "app-1", fast)
+	if err != nil || app.Status != ApplicationStatusUp {
+		t.Fatalf("app = %#v, err = %v", app, err)
 	}
-	if len(app.RemovedDirectories) != 1 || app.RemovedDirectories[0] != ".cache" {
-		t.Fatalf("removed_directories = %#v", app.RemovedDirectories)
+
+	fake = vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"app-1","status":"down"}`)
+	_, err = newAppsService(fake).WaitUntilReady(context.Background(), "app-1", fast)
+	var down *AppNotReadyError
+	if !errors.As(err, &down) || down.Code != "APP_DOWN" {
+		t.Fatalf("err = %v, want APP_DOWN", err)
+	}
+
+	fake = vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"app-1","status":"down","last_build_error":"INSTALL_OUT_OF_MEMORY"}`)
+	_, err = newAppsService(fake).WaitUntilReady(context.Background(), "app-1", fast)
+	if !errors.As(err, &down) || down.Code != string(ApplicationBuildErrorInstallOutOfMemory) {
+		t.Fatalf("err = %v, want INSTALL_OUT_OF_MEMORY", err)
+	}
+
+	fake = vertratest.NewFakeRestClient(t)
+	for i := 0; i < 50; i++ {
+		fake.EnqueueJSON(200, `{"id":"app-1","status":"building"}`)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if _, err = newAppsService(fake).WaitUntilReady(ctx, "app-1", fast); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want deadline exceeded", err)
 	}
 }
 

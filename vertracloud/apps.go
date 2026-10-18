@@ -48,8 +48,13 @@ type AppsService interface {
 	// rest.WithRequestTimeout is passed — bound it with ctx instead.
 	Download(ctx context.Context, id string, opts ...rest.RequestOpt) (io.ReadCloser, error)
 	// Create: POST /v1/apps — scope apps:write. multipart/form-data; see
-	// ApplicationCreateParams for the File/SnapshotID exclusivity rule.
+	// ApplicationCreateParams for the File/SnapshotID exclusivity rule. The API
+	// replies 202 with Status "building"; use WaitUntilReady to follow the build.
 	Create(ctx context.Context, params ApplicationCreateParams, opts ...rest.RequestOpt) (Application, error)
+	// WaitUntilReady polls Get until the app leaves "building". It returns the app
+	// when "up", an *AppNotReadyError when "down", and ctx.Err() when ctx ends
+	// (bound it with context.WithTimeout). opts may be nil.
+	WaitUntilReady(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (Application, error)
 	// Start: POST /v1/apps/:id/start — scope apps:write.
 	Start(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationOperationResponse, error)
 	// Stop: POST /v1/apps/:id/stop — scope apps:write.
@@ -130,12 +135,14 @@ const (
 	ApplicationLanguageRust       ApplicationLanguage = "rust"
 )
 
-// ApplicationStatus is one of "up" | "down".
+// ApplicationStatus is one of "up" | "down" | "building".
 type ApplicationStatus string
 
 const (
 	ApplicationStatusUp   ApplicationStatus = "up"
 	ApplicationStatusDown ApplicationStatus = "down"
+	// ApplicationStatusBuilding is the status right after Create; it ends as up or down.
+	ApplicationStatusBuilding ApplicationStatus = "building"
 )
 
 // ApplicationCluster is a wire enum.
@@ -283,11 +290,26 @@ type Application struct {
 	BuildCommand        *string                    `json:"build_command"`
 	OfflineSince        *time.Time                 `json:"offline_since"`
 	MissingDependencies []string                   `json:"missing_dependencies,omitempty"`
-	RemovedDirectories  []string                   `json:"removed_directories,omitempty"`
 	ShieldCooldown      *ApplicationShieldCooldown `json:"shield_cooldown"`
 	// Deploy is the deploy behavior: zero downtime, automatic rollback and health check.
 	Deploy ApplicationDeploySettings `json:"deploy"`
+	// LastBuildError is the code of the last build or install failure; nil after a
+	// successful build. The detail is in the app log.
+	LastBuildError *ApplicationBuildError `json:"last_build_error"`
 }
+
+// ApplicationBuildError is the code of an application's last build or install failure.
+type ApplicationBuildError string
+
+const (
+	ApplicationBuildErrorBuildFailed          ApplicationBuildError = "BUILD_FAILED"
+	ApplicationBuildErrorBuildTimeout         ApplicationBuildError = "BUILD_TIMEOUT"
+	ApplicationBuildErrorBuildInterrupted     ApplicationBuildError = "BUILD_INTERRUPTED"
+	ApplicationBuildErrorInstallFailed        ApplicationBuildError = "INSTALL_FAILED"
+	ApplicationBuildErrorInstallOutOfMemory   ApplicationBuildError = "INSTALL_OUT_OF_MEMORY"
+	ApplicationBuildErrorInstallTimeout       ApplicationBuildError = "INSTALL_TIMEOUT"
+	ApplicationBuildErrorInstallShieldBlocked ApplicationBuildError = "INSTALL_SHIELD_BLOCKED"
+)
 
 // ApplicationDeploySettings is the deploy behavior of an application. Change
 // it with AppsService.UpdateConfig (ApplicationUpdateConfigBody.Deploy).
@@ -705,6 +727,52 @@ func (s *appsServiceImpl) Get(ctx context.Context, id string, opts ...rest.Reque
 		return Application{}, err
 	}
 	return rest.DecodeJSON[Application](data)
+}
+
+// WaitOptions tunes WaitUntilReady. Interval defaults to 2s.
+type WaitOptions struct {
+	Interval time.Duration
+}
+
+// AppNotReadyError is returned by WaitUntilReady when the build ended with the
+// app "down". The cause is in the app log (Apps.Logs).
+type AppNotReadyError struct {
+	Code string // the app's LastBuildError, or "APP_DOWN" when the API sent none
+	App  Application
+}
+
+func (e *AppNotReadyError) Error() string {
+	return fmt.Sprintf("%s: application %s is down after the build; read its logs for the cause", e.Code, e.App.ID)
+}
+
+func (s *appsServiceImpl) WaitUntilReady(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (Application, error) {
+	interval := 2 * time.Second
+	if opts != nil && opts.Interval > 0 {
+		interval = opts.Interval
+	}
+	for {
+		app, err := s.Get(ctx, id, reqOpts...)
+		if err != nil {
+			return Application{}, err
+		}
+		switch app.Status {
+		case ApplicationStatusUp:
+			return app, nil
+		case ApplicationStatusDown:
+			code := "APP_DOWN"
+			if app.LastBuildError != nil {
+				code = string(*app.LastBuildError)
+			}
+			return app, &AppNotReadyError{Code: code, App: app}
+		}
+		t := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return app, ctx.Err()
+		case <-t.C:
+		}
+	}
 }
 
 func (s *appsServiceImpl) Status(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationStatusInfo, error) {
