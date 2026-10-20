@@ -119,6 +119,17 @@ type client struct {
 	timeout    time.Duration
 }
 
+// String returns a form of the client that never includes the API key.
+func (c client) String() string {
+	return "rest.Client(" + c.baseURL + ")"
+}
+
+// Format makes every fmt verb (%v, %+v, %#v, %s, ...) print String, so logging
+// the client or a struct holding it cannot leak the API key.
+func (c client) Format(f fmt.State, _ rune) {
+	_, _ = io.WriteString(f, c.String())
+}
+
 // NewClient builds a Client. apiKey is required; every other setting is an
 // option with a working default.
 func NewClient(apiKey string, opts ...ClientOpt) (Client, error) {

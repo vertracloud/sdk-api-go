@@ -472,3 +472,30 @@ func TestAsAPIError(t *testing.T) {
 		t.Errorf("AsAPIError(wrapped) = %v, %v", apiErr, ok)
 	}
 }
+
+func TestClientNeverFormatsTheAPIKey(t *testing.T) {
+	const secret = "vc_live_secret_0123456789abcdef"
+	c, err := rest.NewClient(secret, rest.WithBaseURL(testBaseURL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone := c.(rest.BaseURLCloner).CloneWithBaseURL("https://blob.test")
+	wrapped := struct{ Client rest.Client }{c}
+
+	for _, target := range []any{c, clone, &c, wrapped, &wrapped, []rest.Client{c}, map[string]rest.Client{"c": c}} {
+		for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%q", "%x", "%d"} {
+			if got := fmt.Sprintf(verb, target); strings.Contains(got, secret) {
+				t.Errorf("Sprintf(%q, %T) leaked the key: %s", verb, target, got)
+			}
+		}
+		if got := fmt.Sprint(target); strings.Contains(got, secret) {
+			t.Errorf("Sprint(%T) leaked the key: %s", target, got)
+		}
+	}
+	if got := fmt.Sprintf("%v", c); !strings.Contains(got, testBaseURL) {
+		t.Errorf("redacted form should still identify the endpoint, got %q", got)
+	}
+	if s, ok := c.(fmt.Stringer); !ok || strings.Contains(s.String(), secret) {
+		t.Errorf("client must implement a redacting String()")
+	}
+}
