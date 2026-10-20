@@ -398,7 +398,7 @@ func newBlobClient(rc rest.Client, o options) *BlobClient {
 	if hc == nil {
 		hc = http.DefaultClient
 	}
-	b := &BlobClient{rest: blobRest, http: hc}
+	b := &BlobClient{rest: guardPaths(blobRest), http: hc}
 	b.Shares = &blobShares{b}
 	b.Rules = &blobRules{b}
 	b.Domains = &blobDomains{b}

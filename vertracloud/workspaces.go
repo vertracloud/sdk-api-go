@@ -44,7 +44,7 @@ type WorkspacesService interface {
 }
 
 func newWorkspacesService(rc rest.Client) WorkspacesService {
-	return &workspacesServiceImpl{rest: rc}
+	return &workspacesServiceImpl{rest: guardPaths(rc)}
 }
 
 type workspacesServiceImpl struct{ rest rest.Client }

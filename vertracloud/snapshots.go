@@ -42,7 +42,9 @@ type SnapshotsService interface {
 	RestoreTo(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, targetResourceID string, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error)
 }
 
-func newSnapshotsService(rc rest.Client) SnapshotsService { return &snapshotsServiceImpl{rest: rc} }
+func newSnapshotsService(rc rest.Client) SnapshotsService {
+	return &snapshotsServiceImpl{rest: guardPaths(rc)}
+}
 
 type snapshotsServiceImpl struct{ rest rest.Client }
 

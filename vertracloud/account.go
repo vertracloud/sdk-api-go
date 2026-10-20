@@ -30,7 +30,9 @@ type AccountService interface {
 	Favorites() AccountFavoritesService
 }
 
-func newAccountService(rc rest.Client) AccountService { return &accountServiceImpl{rest: rc} }
+func newAccountService(rc rest.Client) AccountService {
+	return &accountServiceImpl{rest: guardPaths(rc)}
+}
 
 type accountServiceImpl struct{ rest rest.Client }
 

@@ -112,7 +112,7 @@ func (s *ApplicationRealtimeEventStream) Event() ApplicationRealtimeEvent {
 	return ApplicationRealtimeEvent{Event: ApplicationRealtimeEventType(event.Event), Data: event.Data, ID: event.ID}
 }
 
-func newAppsService(rc rest.Client) AppsService { return &appsServiceImpl{rest: rc} }
+func newAppsService(rc rest.Client) AppsService { return &appsServiceImpl{rest: guardPaths(rc)} }
 
 type appsServiceImpl struct{ rest rest.Client }
 

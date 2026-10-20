@@ -45,7 +45,9 @@ type DatabasesService interface {
 	Credentials() DatabasesCredentialsService
 }
 
-func newDatabasesService(rc rest.Client) DatabasesService { return &databasesServiceImpl{rest: rc} }
+func newDatabasesService(rc rest.Client) DatabasesService {
+	return &databasesServiceImpl{rest: guardPaths(rc)}
+}
 
 type databasesServiceImpl struct{ rest rest.Client }
 

@@ -28,7 +28,9 @@ type BillingService interface {
 	UpdateDetails(ctx context.Context, body BillingDetailsBody, opts ...rest.RequestOpt) (BillingDetails, error)
 }
 
-func newBillingService(rc rest.Client) BillingService { return &billingServiceImpl{rest: rc} }
+func newBillingService(rc rest.Client) BillingService {
+	return &billingServiceImpl{rest: guardPaths(rc)}
+}
 
 type billingServiceImpl struct{ rest rest.Client }
 
