@@ -22,6 +22,7 @@ const (
 	testAppID     = "app_123"
 	testEnvID     = "env_456"
 	testReleaseID = "rel_789"
+	testDomainID  = "dom_321"
 )
 
 const rollbackReleaseJSON = `{"id":"rel_9","app_id":"app_123","source":"rollback","status":"active","message":null,"author":"octo","github":null,"files_changed":2,"rollback":{"available":false,"expires_at":null,"from":"rel_789"},"has_log":false,"build_duration_ms":null,"first_started_at":"2026-10-11T12:00:00.000Z","created_at":"2026-10-11T12:00:00.000Z"}`
@@ -73,7 +74,7 @@ func parseMultipartRequest(t *testing.T, req vertratest.CapturedCall) (fields ma
 }
 
 // TestApps_RouteMatrix checks, for every non-multipart/non-SSE/non-binary
-// route (36 of the 40), that the Go method issues the expected HTTP method
+// route (38 of the 42), that the Go method issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded correctly. Apps.Create,
 // Apps.Files().Upload, Apps.Download and Apps.Realtime are covered by their
 // own tests below.
@@ -160,22 +161,6 @@ func TestApps_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "Network.CustomDomain.Get", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/network/custom",
-			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"domain":"x.com"}`) },
-			invoke: func(ctx context.Context, svc AppsService) error {
-				_, err := svc.Network().CustomDomain().Get(ctx, testAppID, opts...)
-				return err
-			},
-		},
-		{
-			name: "Network.DNS", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/network/dns",
-			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
-			invoke: func(ctx context.Context, svc AppsService) error {
-				_, err := svc.Network().DNS(ctx, testAppID, opts...)
-				return err
-			},
-		},
-		{
 			name: "Start", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/start",
 			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"status":"ok"}`) },
 			invoke: func(ctx context.Context, svc AppsService) error {
@@ -227,18 +212,50 @@ func TestApps_RouteMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "Network.CustomDomain.Set", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/network/custom",
-			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"domain":"x.com"}`) },
+			name: "Domains.List", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/domains",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
 			invoke: func(ctx context.Context, svc AppsService) error {
-				_, err := svc.Network().CustomDomain().Set(ctx, testAppID, "x.com", opts...)
+				_, err := svc.Domains().List(ctx, testAppID, opts...)
 				return err
 			},
 		},
 		{
-			name: "Network.CustomDomain.Remove", wantMethod: http.MethodDelete, wantPath: "/v1/apps/" + testAppID + "/network/custom",
+			name: "Domains.Add", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/domains",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Domains().Add(ctx, testAppID, ApplicationDomainAddBody{Hostname: "x.com"}, opts...)
+				return err
+			},
+		},
+		{
+			name: "Domains.Update", wantMethod: http.MethodPatch, wantPath: "/v1/apps/" + testAppID + "/domains/" + testDomainID,
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Domains().Update(ctx, testAppID, testDomainID, ApplicationDomainUpdateBody{Primary: true}, opts...)
+				return err
+			},
+		},
+		{
+			name: "Domains.Remove", wantMethod: http.MethodDelete, wantPath: "/v1/apps/" + testAppID + "/domains/" + testDomainID,
 			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `null`) },
 			invoke: func(ctx context.Context, svc AppsService) error {
-				return svc.Network().CustomDomain().Remove(ctx, testAppID, opts...)
+				return svc.Domains().Remove(ctx, testAppID, testDomainID, opts...)
+			},
+		},
+		{
+			name: "Domains.DNS", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/domains/" + testDomainID + "/dns",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Domains().DNS(ctx, testAppID, testDomainID, opts...)
+				return err
+			},
+		},
+		{
+			name: "Domains.Connect", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/domains/" + testDomainID + "/connect",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"url":"https://dns.example/apply"}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Domains().Connect(ctx, testAppID, testDomainID, opts...)
+				return err
 			},
 		},
 		{
@@ -259,7 +276,7 @@ func TestApps_RouteMatrix(t *testing.T) {
 		{
 			name: "Network.Publish", wantMethod: http.MethodPost, wantPath: "/v1/apps/" + testAppID + "/network/publish",
 			enqueue: func(fake *vertratest.FakeRestClient) {
-				fake.EnqueueJSON(200, `{"subdomain":"x","custom_domain":null,"type":2}`)
+				fake.EnqueueJSON(200, `{"subdomain":"x","domains":[],"type":2}`)
 			},
 			invoke: func(ctx context.Context, svc AppsService) error {
 				_, err := svc.Network().Publish(ctx, testAppID, "", opts...)
@@ -269,7 +286,7 @@ func TestApps_RouteMatrix(t *testing.T) {
 		{
 			name: "Network.Unpublish", wantMethod: http.MethodDelete, wantPath: "/v1/apps/" + testAppID + "/network/publish",
 			enqueue: func(fake *vertratest.FakeRestClient) {
-				fake.EnqueueJSON(200, `{"subdomain":null,"custom_domain":null,"type":2}`)
+				fake.EnqueueJSON(200, `{"subdomain":null,"domains":[],"type":2}`)
 			},
 			invoke: func(ctx context.Context, svc AppsService) error {
 				_, err := svc.Network().Unpublish(ctx, testAppID, opts...)
@@ -391,8 +408,8 @@ func TestApps_RouteMatrix(t *testing.T) {
 		},
 	}
 
-	if len(cases) != 36 {
-		t.Fatalf("expected 36 table cases (40 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
+	if len(cases) != 38 {
+		t.Fatalf("expected 38 table cases (42 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
@@ -456,15 +473,139 @@ func TestApps_DeploysWebhookGet_DecodesAPIShape(t *testing.T) {
 	}
 }
 
-func TestApps_DNSRecordUsesContractEnums(t *testing.T) {
-	if got := reflect.TypeOf(ApplicationDNSRecord{}.Type).Name(); got != "ApplicationDNSRecordType" {
-		t.Fatalf("DNS record type = %s, want ApplicationDNSRecordType", got)
+func TestApps_OwnerPlanIsNullablePlanName(t *testing.T) {
+	typ := reflect.TypeOf(Application{}.OwnerPlan)
+	if typ.Kind() != reflect.Ptr || typ.Elem().Name() != "UserPlanName" {
+		t.Fatalf("application owner_plan type = %s, want *UserPlanName", typ)
 	}
-	if got := reflect.TypeOf(ApplicationDNSRecord{}.Status).Name(); got != "ApplicationDNSRecordStatus" {
-		t.Fatalf("DNS record status = %s, want ApplicationDNSRecordStatus", got)
+	var app Application
+	if err := json.Unmarshal([]byte(`{"owner_plan":"enterprise-12"}`), &app); err != nil {
+		t.Fatal(err)
 	}
-	if got := reflect.TypeOf(Application{}.OwnerPlanID).Name(); got != "UserPlan" {
-		t.Fatalf("application owner_plan_id type = %s, want UserPlan", got)
+	if app.OwnerPlan == nil || *app.OwnerPlan != UserPlanNameEnterprise12 {
+		t.Fatalf("owner_plan = %v", app.OwnerPlan)
+	}
+	if err := json.Unmarshal([]byte(`{"owner_plan":null}`), &app); err != nil || app.OwnerPlan != nil {
+		t.Fatalf("null owner_plan = %v, err %v", app.OwnerPlan, err)
+	}
+}
+
+func TestApps_DecodesDomainsList(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `[{"id":"d1","hostname":"x.com","apex":true,"companion_of":null,"redirect_to":null,"redirect_status":308,"path_prefix":"/api","port":3000,"status":"active","ssl_status":"pending","created_at":"2026-10-20T12:00:00Z"},{"id":"d2","hostname":"www.x.com","apex":false,"companion_of":"d1","redirect_to":"d1","redirect_status":301,"path_prefix":null,"port":80,"status":"moved","ssl_status":"failed","created_at":"2026-10-20T12:00:00Z"}]`)
+	got, err := newAppsService(fake).Domains().List(context.Background(), testAppID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("domains = %#v", got)
+	}
+	d := got[0]
+	if d.Hostname != "x.com" || !d.Apex || d.CompanionOf != nil || d.RedirectStatus != ApplicationDomainRedirectStatusPermanentRedirect ||
+		d.PathPrefix == nil || *d.PathPrefix != "/api" || d.Port != 3000 || d.Status != ApplicationDomainStatusActive || d.SSLStatus != ApplicationDomainSSLStatusPending {
+		t.Fatalf("domain = %#v", d)
+	}
+	w := got[1]
+	if w.CompanionOf == nil || *w.CompanionOf != "d1" || w.RedirectTo == nil || *w.RedirectTo != "d1" ||
+		w.RedirectStatus != ApplicationDomainRedirectStatusMovedPermanently || w.Status != ApplicationDomainStatusMoved || w.SSLStatus != ApplicationDomainSSLStatusFailed {
+		t.Fatalf("companion = %#v", w)
+	}
+}
+
+func TestApps_ApplicationDecodesDomains(t *testing.T) {
+	var app Application
+	if err := json.Unmarshal([]byte(`{"id":"a","domains":[{"id":"d1","hostname":"x.com","port":80}]}`), &app); err != nil {
+		t.Fatal(err)
+	}
+	if len(app.Domains) != 1 || app.Domains[0].Hostname != "x.com" {
+		t.Fatalf("domains = %#v", app.Domains)
+	}
+	var pub ApplicationWebPublish
+	if err := json.Unmarshal([]byte(`{"subdomain":null,"domains":["x.com"],"type":1}`), &pub); err != nil || len(pub.Domains) != 1 {
+		t.Fatalf("publish = %#v, err %v", pub, err)
+	}
+}
+
+func TestApps_DomainsAdd_Body(t *testing.T) {
+	no := false
+	cases := []struct {
+		name string
+		body ApplicationDomainAddBody
+		want string
+	}{
+		{"hostname only", ApplicationDomainAddBody{Hostname: "x.com"}, `{"hostname":"x.com"}`},
+		{"all fields", ApplicationDomainAddBody{Hostname: "x.com", WWW: &no, Port: 3000, PathPrefix: "/api", RedirectTo: "d1", RedirectStatus: ApplicationDomainRedirectStatusFound},
+			`{"hostname":"x.com","www":false,"port":3000,"path_prefix":"/api","redirect_to":"d1","redirect_status":302}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, `[]`)
+			if _, err := newAppsService(fake).Domains().Add(context.Background(), testAppID, tc.body); err != nil {
+				t.Fatal(err)
+			}
+			req := fake.Requests[0]
+			if string(req.Body) != tc.want || req.ContentType != "application/json" {
+				t.Errorf("body=%s ct=%q, want %s", req.Body, req.ContentType, tc.want)
+			}
+		})
+	}
+}
+
+func TestApps_DomainsUpdate_Body(t *testing.T) {
+	port := 8080
+	cases := []struct {
+		name string
+		body ApplicationDomainUpdateBody
+		want string
+	}{
+		{"empty", ApplicationDomainUpdateBody{}, `{}`},
+		{"port and status", ApplicationDomainUpdateBody{Port: &port, RedirectStatus: ApplicationDomainRedirectStatusTemporaryRedirect}, `{"port":8080,"redirect_status":307}`},
+		{"clear nullable", ApplicationDomainUpdateBody{PathPrefix: NullableNull[string](), RedirectTo: NullableNull[string]()}, `{"path_prefix":null,"redirect_to":null}`},
+		{"set nullable", ApplicationDomainUpdateBody{PathPrefix: NullableValue("/v1"), RedirectTo: NullableValue("d2")}, `{"path_prefix":"/v1","redirect_to":"d2"}`},
+		{"primary", ApplicationDomainUpdateBody{Primary: true}, `{"primary":true}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, `[]`)
+			if _, err := newAppsService(fake).Domains().Update(context.Background(), testAppID, testDomainID, tc.body); err != nil {
+				t.Fatal(err)
+			}
+			if got := string(fake.Requests[0].Body); got != tc.want {
+				t.Errorf("body=%s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestApps_DomainsDNSAndConnect_Decode(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `[{"type":"CNAME","name":"x.com","value":"edge.example","status":"pending"},{"type":"TXT","name":"_v.x.com","value":"abc","status":"active"}]`)
+	fake.EnqueueJSON(200, `{"url":"https://dns.example/apply"}`)
+	svc := newAppsService(fake).Domains()
+	recs, err := svc.DNS(context.Background(), testAppID, testDomainID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 2 || recs[0].Type != ApplicationDomainDNSRecordTypeCNAME || recs[0].Status != ApplicationDomainDNSRecordStatusPending ||
+		recs[1].Type != ApplicationDomainDNSRecordTypeTXT || recs[1].Status != ApplicationDomainDNSRecordStatusActive {
+		t.Fatalf("records = %#v", recs)
+	}
+	conn, err := svc.Connect(context.Background(), testAppID, testDomainID)
+	if err != nil || conn.URL != "https://dns.example/apply" {
+		t.Fatalf("connect = %#v, err %v", conn, err)
+	}
+}
+
+func TestApps_DomainsPathEscapesIDs(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `null`)
+	if err := newAppsService(fake).Domains().Remove(context.Background(), "a/b", "d c"); err != nil {
+		t.Fatal(err)
+	}
+	if got := fake.Requests[0].Path; got != "/v1/apps/a%2Fb/domains/d%20c" {
+		t.Fatalf("path = %s", got)
 	}
 }
 

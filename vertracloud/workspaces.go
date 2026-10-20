@@ -510,7 +510,7 @@ type WorkspaceInfo struct {
 	Databases            []Database                    `json:"databases"`
 	Permissions          []WorkspacePermission         `json:"permissions"`
 	IsOwner              bool                          `json:"is_owner"`
-	OwnerPlanID          UserPlan                      `json:"owner_plan_id"`
+	OwnerPlan            *UserPlanName                 `json:"owner_plan"`
 	ResourceOrganization WorkspaceResourceOrganization `json:"resource_organization"`
 }
 

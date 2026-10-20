@@ -15,12 +15,12 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// AppsService groups every /v1/apps/* route (40 routes: runtimes, status,
-// realtime, metrics, logs, download, deploys, network, envs, files, releases).
+// AppsService groups every /v1/apps/* route (42 routes: runtimes, status,
+// realtime, metrics, logs, download, deploys, network, domains, envs, files, releases).
 //
 // Nested resources (deploys, network, envs, files, releases, and their own children)
 // are exposed as methods returning their own service interface — e.g.
-// AppsService.Deploys(), AppsNetworkService.CustomDomain() — built on
+// AppsService.Deploys(), AppsService.Domains() — built on
 // demand by the implementation. Construction is cheap (one struct literal),
 // so nothing is cached.
 type AppsService interface {
@@ -70,6 +70,7 @@ type AppsService interface {
 
 	Deploys() AppsDeploysService
 	Network() AppsNetworkService
+	Domains() AppsDomainsService
 	Envs() AppsEnvsService
 	Files() AppsFilesService
 	Releases() AppsReleasesService
@@ -273,14 +274,14 @@ type Application struct {
 	Name                string                     `json:"name"`
 	Description         string                     `json:"description,omitempty"`
 	OwnerID             string                     `json:"owner_id"`
-	OwnerPlanID         UserPlan                   `json:"owner_plan_id"`
+	OwnerPlan           *UserPlanName              `json:"owner_plan"`
 	Language            ApplicationLanguage        `json:"language"`
 	RAM                 int                        `json:"ram"`
 	Status              ApplicationStatus          `json:"status"`
 	Subdomain           *string                    `json:"subdomain"`
 	PublicURL           *string                    `json:"public_url"`
 	Github              *ApplicationGithub         `json:"github,omitempty"`
-	CustomDomain        *string                    `json:"custom_domain"`
+	Domains             []ApplicationDomain        `json:"domains"`
 	LastSnapshot        *time.Time                 `json:"last_snapshot"`
 	CreatedAt           time.Time                  `json:"created_at"`
 	UpdatedAt           time.Time                  `json:"updated_at"`
@@ -506,26 +507,102 @@ type ApplicationReleaseLog struct {
 	Content *string `json:"content"`
 }
 
-type ApplicationDNSRecord struct {
-	Type   ApplicationDNSRecordType   `json:"type"`
-	Name   string                     `json:"name"`
-	Value  string                     `json:"value"`
-	Status ApplicationDNSRecordStatus `json:"status"`
+type ApplicationDomainStatus string
+
+const (
+	ApplicationDomainStatusPending ApplicationDomainStatus = "pending"
+	ApplicationDomainStatusActive  ApplicationDomainStatus = "active"
+	ApplicationDomainStatusMoved   ApplicationDomainStatus = "moved"
+	ApplicationDomainStatusDeleted ApplicationDomainStatus = "deleted"
+)
+
+type ApplicationDomainSSLStatus string
+
+const (
+	ApplicationDomainSSLStatusPending ApplicationDomainSSLStatus = "pending"
+	ApplicationDomainSSLStatusActive  ApplicationDomainSSLStatus = "active"
+	ApplicationDomainSSLStatusFailed  ApplicationDomainSSLStatus = "failed"
+)
+
+// ApplicationDomainRedirectStatus is the HTTP status of a domain-to-domain redirect.
+type ApplicationDomainRedirectStatus int
+
+const (
+	ApplicationDomainRedirectStatusMovedPermanently  ApplicationDomainRedirectStatus = 301
+	ApplicationDomainRedirectStatusFound             ApplicationDomainRedirectStatus = 302
+	ApplicationDomainRedirectStatusTemporaryRedirect ApplicationDomainRedirectStatus = 307
+	ApplicationDomainRedirectStatusPermanentRedirect ApplicationDomainRedirectStatus = 308
+)
+
+// ApplicationDomain is a custom domain of an application.
+type ApplicationDomain struct {
+	ID       string `json:"id"`
+	Hostname string `json:"hostname"`
+	// Apex is true for a registrable root domain, which needs a DNS provider that flattens CNAME.
+	Apex bool `json:"apex"`
+	// CompanionOf is the id of the main domain when this is its automatic www/root companion.
+	CompanionOf *string `json:"companion_of"`
+	// RedirectTo is the id of another domain of the app this one redirects to; nil serves the app.
+	RedirectTo     *string                         `json:"redirect_to"`
+	RedirectStatus ApplicationDomainRedirectStatus `json:"redirect_status"`
+	PathPrefix     *string                         `json:"path_prefix"`
+	Port           int                             `json:"port"`
+	Status         ApplicationDomainStatus         `json:"status"`
+	SSLStatus      ApplicationDomainSSLStatus      `json:"ssl_status"`
+	CreatedAt      time.Time                       `json:"created_at"`
 }
 
-type ApplicationDNSRecordType string
+type ApplicationDomainDNSRecordType string
 
 const (
-	ApplicationDNSRecordTypeCNAME ApplicationDNSRecordType = "CNAME"
-	ApplicationDNSRecordTypeTXT   ApplicationDNSRecordType = "TXT"
+	ApplicationDomainDNSRecordTypeCNAME ApplicationDomainDNSRecordType = "CNAME"
+	ApplicationDomainDNSRecordTypeTXT   ApplicationDomainDNSRecordType = "TXT"
 )
 
-type ApplicationDNSRecordStatus string
+type ApplicationDomainDNSRecordStatus string
 
 const (
-	ApplicationDNSRecordStatusActive            ApplicationDNSRecordStatus = "active"
-	ApplicationDNSRecordStatusPendingValidation ApplicationDNSRecordStatus = "pending_validation"
+	ApplicationDomainDNSRecordStatusPending ApplicationDomainDNSRecordStatus = "pending"
+	ApplicationDomainDNSRecordStatusActive  ApplicationDomainDNSRecordStatus = "active"
 )
+
+// ApplicationDomainDNSRecord is a record to create at the DNS provider of a domain.
+type ApplicationDomainDNSRecord struct {
+	Type   ApplicationDomainDNSRecordType   `json:"type"`
+	Name   string                           `json:"name"`
+	Value  string                           `json:"value"`
+	Status ApplicationDomainDNSRecordStatus `json:"status"`
+}
+
+// ApplicationDomainConnect is the Domain Connect link of a domain.
+type ApplicationDomainConnect struct {
+	URL string `json:"url"`
+}
+
+// ApplicationDomainAddBody is the body of POST /v1/apps/:id/domains. Zero values are omitted.
+type ApplicationDomainAddBody struct {
+	Hostname string `json:"hostname"`
+	// WWW creates the automatic www/root companion; nil keeps the server default (true).
+	WWW *bool `json:"www,omitempty"`
+	// Port is 1 to 65535; 0 keeps the default (80).
+	Port int `json:"port,omitempty"`
+	// PathPrefix is a literal path starting with "/" and without a trailing "/".
+	PathPrefix string `json:"path_prefix,omitempty"`
+	// RedirectTo is the id of another domain of the same app.
+	RedirectTo     string                          `json:"redirect_to,omitempty"`
+	RedirectStatus ApplicationDomainRedirectStatus `json:"redirect_status,omitempty"`
+}
+
+// ApplicationDomainUpdateBody is the body of PATCH /v1/apps/:id/domains/:domainId.
+// Only set fields are sent; NullableNull clears PathPrefix or RedirectTo.
+type ApplicationDomainUpdateBody struct {
+	Port           *int                            `json:"port,omitempty"`
+	PathPrefix     *Nullable[string]               `json:"path_prefix,omitempty"`
+	RedirectTo     *Nullable[string]               `json:"redirect_to,omitempty"`
+	RedirectStatus ApplicationDomainRedirectStatus `json:"redirect_status,omitempty"`
+	// Primary swaps the domain with its companion as the main one.
+	Primary bool `json:"primary,omitempty"`
+}
 
 type ApplicationWebhook struct {
 	WebhookURL string `json:"webhook_url"`
@@ -537,14 +614,11 @@ type ApplicationSubdomainResponse struct {
 	Subdomain string `json:"subdomain"`
 }
 
-type ApplicationCustomDomainResponse struct {
-	Domain string `json:"domain"`
-}
-
 type ApplicationWebPublish struct {
-	Subdomain    *string         `json:"subdomain"`
-	CustomDomain *string         `json:"custom_domain"`
-	Type         ApplicationType `json:"type"`
+	Subdomain *string `json:"subdomain"`
+	// Domains are the hostnames of the custom domains.
+	Domains []string        `json:"domains"`
+	Type    ApplicationType `json:"type"`
 }
 
 // ApplicationRuntimeEntry is one entry of GET /v1/apps/runtimes, keyed by runtime
@@ -994,13 +1068,11 @@ func (w *appsDeploysWebhookServiceImpl) Delete(ctx context.Context, id string, o
 }
 
 // ---------------------------------------------------------------------------
-// Network / Network.CustomDomain
+// Network
 // ---------------------------------------------------------------------------
 
 // AppsNetworkService groups the /v1/apps/:id/network/* routes.
 type AppsNetworkService interface {
-	// DNS: GET /v1/apps/:id/network/dns — scope apps:read.
-	DNS(ctx context.Context, id string, opts ...rest.RequestOpt) ([]ApplicationDNSRecord, error)
 	// PurgeCache: POST /v1/apps/:id/network/purge-cache — scope apps:write.
 	// body may be nil, sent as an empty {} object.
 	PurgeCache(ctx context.Context, id string, body *ApplicationPurgeCacheBody, opts ...rest.RequestOpt) error
@@ -1011,23 +1083,14 @@ type AppsNetworkService interface {
 	// Scale can choose).
 	Publish(ctx context.Context, id, subdomain string, opts ...rest.RequestOpt) (ApplicationWebPublish, error)
 	// Unpublish: DELETE /v1/apps/:id/network/publish — scope apps:write.
-	// Frees the subdomain, removes any custom domain, and makes the app
+	// Frees the subdomain, removes the custom domains, and makes the app
 	// private.
 	Unpublish(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationWebPublish, error)
-	CustomDomain() AppsNetworkCustomDomainService
 }
 
 type appsNetworkServiceImpl struct{ rest rest.Client }
 
 func (s *appsServiceImpl) Network() AppsNetworkService { return &appsNetworkServiceImpl{rest: s.rest} }
-
-func (n *appsNetworkServiceImpl) DNS(ctx context.Context, id string, opts ...rest.RequestOpt) ([]ApplicationDNSRecord, error) {
-	data, err := n.rest.Do(ctx, http.MethodGet, appPath(id, "/network/dns"), nil, nil, "", opts...)
-	if err != nil {
-		return nil, err
-	}
-	return rest.DecodeJSON[[]ApplicationDNSRecord](data)
-}
 
 func (n *appsNetworkServiceImpl) PurgeCache(ctx context.Context, id string, body *ApplicationPurgeCacheBody, opts ...rest.RequestOpt) error {
 	var b ApplicationPurgeCacheBody
@@ -1080,49 +1143,88 @@ func (n *appsNetworkServiceImpl) Unpublish(ctx context.Context, id string, opts 
 	return rest.DecodeJSON[ApplicationWebPublish](data)
 }
 
-func (n *appsNetworkServiceImpl) CustomDomain() AppsNetworkCustomDomainService {
-	return &appsNetworkCustomDomainServiceImpl{rest: n.rest}
+// ---------------------------------------------------------------------------
+// Domains
+// ---------------------------------------------------------------------------
+
+// AppsDomainsService groups the /v1/apps/:id/domains/* routes.
+type AppsDomainsService interface {
+	// List: GET /v1/apps/:id/domains — scope apps:read.
+	List(ctx context.Context, id string, opts ...rest.RequestOpt) ([]ApplicationDomain, error)
+	// Add: POST /v1/apps/:id/domains — scope apps:write. Returns the created
+	// domain and its automatic companion, when there is one.
+	Add(ctx context.Context, id string, body ApplicationDomainAddBody, opts ...rest.RequestOpt) ([]ApplicationDomain, error)
+	// Update: PATCH /v1/apps/:id/domains/:domainId — scope apps:write.
+	Update(ctx context.Context, id, domainID string, body ApplicationDomainUpdateBody, opts ...rest.RequestOpt) ([]ApplicationDomain, error)
+	// Remove: DELETE /v1/apps/:id/domains/:domainId — scope apps:write. Also
+	// removes the automatic companion.
+	Remove(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) error
+	// DNS: GET /v1/apps/:id/domains/:domainId/dns — scope apps:read.
+	DNS(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) ([]ApplicationDomainDNSRecord, error)
+	// Connect: POST /v1/apps/:id/domains/:domainId/connect — scope apps:write.
+	// Fails with 404 DOMAIN_CONNECT_UNAVAILABLE when the provider is not supported.
+	Connect(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) (ApplicationDomainConnect, error)
 }
 
-// AppsNetworkCustomDomainService groups the /v1/apps/:id/network/custom
-// routes.
-type AppsNetworkCustomDomainService interface {
-	// Get: GET /v1/apps/:id/network/custom — scope apps:read.
-	Get(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationCustomDomainResponse, error)
-	// Set: POST /v1/apps/:id/network/custom — scope apps:write.
-	Set(ctx context.Context, id, domain string, opts ...rest.RequestOpt) (ApplicationCustomDomainResponse, error)
-	// Remove: DELETE /v1/apps/:id/network/custom — scope apps:write.
-	Remove(ctx context.Context, id string, opts ...rest.RequestOpt) error
+type appsDomainsServiceImpl struct{ rest rest.Client }
+
+func (s *appsServiceImpl) Domains() AppsDomainsService { return &appsDomainsServiceImpl{rest: s.rest} }
+
+func domainPath(id, domainID, suffix string) string {
+	return appPath(id, "/domains/"+url.PathEscape(domainID)+suffix)
 }
 
-type appsNetworkCustomDomainServiceImpl struct{ rest rest.Client }
-
-func (cd *appsNetworkCustomDomainServiceImpl) Get(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationCustomDomainResponse, error) {
-	data, err := cd.rest.Do(ctx, http.MethodGet, appPath(id, "/network/custom"), nil, nil, "", opts...)
+func (d *appsDomainsServiceImpl) List(ctx context.Context, id string, opts ...rest.RequestOpt) ([]ApplicationDomain, error) {
+	data, err := d.rest.Do(ctx, http.MethodGet, appPath(id, "/domains"), nil, nil, "", opts...)
 	if err != nil {
-		return ApplicationCustomDomainResponse{}, err
+		return nil, err
 	}
-	return rest.DecodeJSON[ApplicationCustomDomainResponse](data)
+	return rest.DecodeJSON[[]ApplicationDomain](data)
 }
 
-func (cd *appsNetworkCustomDomainServiceImpl) Set(ctx context.Context, id, domain string, opts ...rest.RequestOpt) (ApplicationCustomDomainResponse, error) {
-	body := struct {
-		Domain string `json:"domain"`
-	}{Domain: domain}
+func (d *appsDomainsServiceImpl) Add(ctx context.Context, id string, body ApplicationDomainAddBody, opts ...rest.RequestOpt) ([]ApplicationDomain, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return ApplicationCustomDomainResponse{}, fmt.Errorf("vertracloud: encode request body: %w", err)
+		return nil, fmt.Errorf("vertracloud: encode request body: %w", err)
 	}
-	data, err := cd.rest.Do(ctx, http.MethodPost, appPath(id, "/network/custom"), nil, bytes.NewReader(payload), "application/json", opts...)
+	data, err := d.rest.Do(ctx, http.MethodPost, appPath(id, "/domains"), nil, bytes.NewReader(payload), "application/json", opts...)
 	if err != nil {
-		return ApplicationCustomDomainResponse{}, err
+		return nil, err
 	}
-	return rest.DecodeJSON[ApplicationCustomDomainResponse](data)
+	return rest.DecodeJSON[[]ApplicationDomain](data)
 }
 
-func (cd *appsNetworkCustomDomainServiceImpl) Remove(ctx context.Context, id string, opts ...rest.RequestOpt) error {
-	_, err := cd.rest.Do(ctx, http.MethodDelete, appPath(id, "/network/custom"), nil, nil, "", opts...)
+func (d *appsDomainsServiceImpl) Update(ctx context.Context, id, domainID string, body ApplicationDomainUpdateBody, opts ...rest.RequestOpt) ([]ApplicationDomain, error) {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("vertracloud: encode request body: %w", err)
+	}
+	data, err := d.rest.Do(ctx, http.MethodPatch, domainPath(id, domainID, ""), nil, bytes.NewReader(payload), "application/json", opts...)
+	if err != nil {
+		return nil, err
+	}
+	return rest.DecodeJSON[[]ApplicationDomain](data)
+}
+
+func (d *appsDomainsServiceImpl) Remove(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) error {
+	_, err := d.rest.Do(ctx, http.MethodDelete, domainPath(id, domainID, ""), nil, nil, "", opts...)
 	return err
+}
+
+func (d *appsDomainsServiceImpl) DNS(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) ([]ApplicationDomainDNSRecord, error) {
+	data, err := d.rest.Do(ctx, http.MethodGet, domainPath(id, domainID, "/dns"), nil, nil, "", opts...)
+	if err != nil {
+		return nil, err
+	}
+	return rest.DecodeJSON[[]ApplicationDomainDNSRecord](data)
+}
+
+func (d *appsDomainsServiceImpl) Connect(ctx context.Context, id, domainID string, opts ...rest.RequestOpt) (ApplicationDomainConnect, error) {
+	data, err := d.rest.Do(ctx, http.MethodPost, domainPath(id, domainID, "/connect"), nil, nil, "", opts...)
+	if err != nil {
+		return ApplicationDomainConnect{}, err
+	}
+	return rest.DecodeJSON[ApplicationDomainConnect](data)
 }
 
 // ---------------------------------------------------------------------------

@@ -127,6 +127,36 @@ _, err = client.Apps.UpdateConfig(ctx, appID, vertracloud.ApplicationUpdateConfi
 
 `Releases().Preview` returns only the names of the environment variables a rollback would change (`added`, `modified` or `removed`), never their values. To also restore the variables saved with the release, set `RestoreEnvironment` in `ApplicationRollbackBody`; that needs the `apps:envs` scope as well (without it the call fails with 403 `API_KEY_SCOPE_DENIED`). Error codes such as `RELEASE_EXPIRED` or `RESTORE_COOLDOWN` arrive in `APIError.Code` as plain strings.
 
+### Custom domains
+
+```go
+domains, err := client.Apps.Domains().List(ctx, appID)
+
+// Adds the domain and, by default, its www/root companion (not counted toward the plan limit)
+added, err := client.Apps.Domains().Add(ctx, appID, vertracloud.ApplicationDomainAddBody{
+	Hostname:   "example.com",
+	Port:       3000,   // optional, 1-65535, default 80
+	PathPrefix: "/api", // optional literal prefix
+})
+
+// Change one domain; NullableNull clears path_prefix / redirect_to
+_, err = client.Apps.Domains().Update(ctx, appID, domainID, vertracloud.ApplicationDomainUpdateBody{
+	RedirectTo:     vertracloud.NullableValue(otherDomainID),
+	RedirectStatus: vertracloud.ApplicationDomainRedirectStatusFound,
+})
+_, err = client.Apps.Domains().Update(ctx, appID, domainID, vertracloud.ApplicationDomainUpdateBody{Primary: true})
+
+records, err := client.Apps.Domains().DNS(ctx, appID, domainID) // records to create at your DNS provider
+link, err := client.Apps.Domains().Connect(ctx, appID, domainID) // 404 DOMAIN_CONNECT_UNAVAILABLE when unsupported
+err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes the companion
+```
+
+`Application.Domains` carries the same list. Reads need `apps:read`; add, update, remove and connect need `apps:write`.
+
+### Plans
+
+`UserPlanName` holds a plan name (`UserPlanNamePro`, `UserPlanNameEnterprise12`, ...). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *UserPlanName` (nil = no plan).
+
 Public payloads, enums, and input types use the `Application` prefix. Input
 types end in `Params` for query/options/multipart values and `Body` for JSON
 bodies. Resource deletion methods use `Delete`; `Remove` is reserved for

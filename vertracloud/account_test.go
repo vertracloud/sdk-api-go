@@ -157,17 +157,23 @@ func TestAccount_Update_ReturnsAPIUserShape(t *testing.T) {
 	if got := reflect.TypeOf(APIUser{}.Language).Name(); got != "UserLanguage" {
 		t.Fatalf("APIUser.Language type = %s, want UserLanguage", got)
 	}
-	if got := reflect.TypeOf(AccountPlan{}.ID).Name(); got != "UserPlan" {
-		t.Fatalf("AccountPlan.ID type = %s, want UserPlan", got)
+	if got := reflect.TypeOf(AccountPlan{}.Name).Name(); got != "UserPlanName" {
+		t.Fatalf("AccountPlan.Name type = %s, want UserPlanName", got)
+	}
+	if _, ok := reflect.TypeOf(APIUser{}).FieldByName("PlanID"); ok {
+		t.Fatal("APIUser must not have PlanID")
+	}
+	if _, ok := reflect.TypeOf(AccountPlan{}).FieldByName("ID"); ok {
+		t.Fatal("AccountPlan must not have ID")
 	}
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"id":"u1","name":"Ana","email":"ana@example.com","plan_id":2,"language":"pt-br","workspace_invites_enabled":true,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-23T12:00:00Z"}`)
+	fake.EnqueueJSON(200, `{"id":"u1","name":"Ana","email":"ana@example.com","language":"pt-br","workspace_invites_enabled":true,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-23T12:00:00Z"}`)
 	name := "Ana"
 	got, err := newAccountService(fake).Update(context.Background(), AccountUpdateBody{Name: &name})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reflect.TypeOf(got).Name() != "APIUser" || got.ID != "u1" || got.PlanID != 2 || got.Email != "ana@example.com" || got.Name != "Ana" {
+	if reflect.TypeOf(got).Name() != "APIUser" || got.ID != "u1" || got.Email != "ana@example.com" || got.Name != "Ana" {
 		t.Fatalf("updated user = %#v", got)
 	}
 }
@@ -216,16 +222,28 @@ func TestAccount_FavoritesAdd_PositionForwarded(t *testing.T) {
 	}
 }
 
+func TestAccount_Get_NullPlanMeansNoPlan(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"u1","plan":null,"applications":[],"databases":[],"connections":[]}`)
+	info, err := newAccountService(fake).Get(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Plan != nil {
+		t.Fatalf("plan = %+v, want nil", info.Plan)
+	}
+}
+
 // TestAccount_Get_DecodesFullShape sanity-checks that AccountInfo decodes
 // the nested plan/applications/databases/connections/resource_organization
 // shape, not just the flat Account fields.
 func TestAccount_Get_DecodesFullShape(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueJSON(200, `{
-		"id":"u1","name":"Ana","email":"a@x.com","plan_id":2,"language":"pt-br",
+		"id":"u1","name":"Ana","email":"a@x.com","language":"pt-br",
 		"workspace_invites_enabled":true,
 		"created_at":"2026-09-22T12:00:00.000Z","updated_at":"2026-09-22T12:00:00.000Z",
-		"plan":{"id":2,"name":"Pro","expires_at":null,"duration":30,"memory":{"limit":2048,"used":512}},
+		"plan":{"name":"pro","expires_at":"2026-11-20T12:00:00Z","duration":30,"memory":{"limit":2048,"used":512}},
 		"applications":[],"databases":[],"connections":[{"provider":"github","username":"ana","created_at":"2026-09-22T12:00:00.000Z"}],
 		"resource_organization":{"scope":"personal","user_id":"u1","workspace_id":null,"folders":[],"favorites":[]}
 	}`)
@@ -238,7 +256,7 @@ func TestAccount_Get_DecodesFullShape(t *testing.T) {
 	if info.ID != "u1" || info.Name != "Ana" {
 		t.Errorf("flat APIUser fields not decoded: %+v", info.APIUser)
 	}
-	if info.Plan.Name != "Pro" || info.Plan.Memory.Limit != 2048 {
+	if info.Plan == nil || info.Plan.Name != UserPlanNamePro || info.Plan.Memory.Limit != 2048 || info.Plan.ExpiresAt.IsZero() {
 		t.Errorf("Plan not decoded: %+v", info.Plan)
 	}
 	if len(info.Connections) != 1 || info.Connections[0].Provider != "github" {

@@ -169,8 +169,8 @@ func TestDatabases_Update_DecodesStatusResponse(t *testing.T) {
 	if got := reflect.TypeOf(DatabaseOperationResponse{}.Status).Name(); got != "ResourceOperationStatus" {
 		t.Fatalf("database operation status = %s, want ResourceOperationStatus", got)
 	}
-	if got := reflect.TypeOf(Database{}.OwnerPlanID).Name(); got != "UserPlan" {
-		t.Fatalf("database owner_plan_id type = %s, want UserPlan", got)
+	if typ := reflect.TypeOf(Database{}.OwnerPlan); typ.Kind() != reflect.Ptr || typ.Elem().Name() != "UserPlanName" {
+		t.Fatalf("database owner_plan type = %s, want *UserPlanName", typ)
 	}
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueJSON(200, `{"status":"success"}`)

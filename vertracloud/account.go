@@ -85,7 +85,6 @@ type APIUser struct {
 	ID       string       `json:"id"`
 	Name     string       `json:"name"`
 	Email    string       `json:"email"`
-	PlanID   UserPlan     `json:"plan_id"`
 	Language UserLanguage `json:"language"`
 	// WorkspaceInvitesEnabled: accepts a workspace invite by e-mail
 	// (WORKSPACE_INVITES_DISABLED when off).
@@ -114,35 +113,34 @@ type AccountPlanMemory struct {
 	Used  int `json:"used"`
 }
 
-// UserPlan is a numeric plan identifier used on the API wire.
-type UserPlan int
+// UserPlanName is the name of a plan. An account without a plan has none.
+type UserPlanName string
 
 const (
-	UserPlanFree         UserPlan = 1
-	UserPlanEconomy      UserPlan = 2
-	UserPlanPro          UserPlan = 3
-	UserPlanScale        UserPlan = 4
-	UserPlanEnterprise4  UserPlan = 5
-	UserPlanEnterprise8  UserPlan = 6
-	UserPlanEnterprise16 UserPlan = 7
-	UserPlanEnterprise32 UserPlan = 8
-	UserPlanIntermediary UserPlan = 9
-	UserPlanEnterprise12 UserPlan = 10
-	UserPlanEnterprise14 UserPlan = 11
-	UserPlanEnterprise18 UserPlan = 12
-	UserPlanEnterprise20 UserPlan = 13
-	UserPlanEnterprise22 UserPlan = 14
-	UserPlanEnterprise24 UserPlan = 15
-	UserPlanEnterprise26 UserPlan = 16
-	UserPlanEnterprise28 UserPlan = 17
-	UserPlanEnterprise30 UserPlan = 18
-	UserPlanEnterprise6  UserPlan = 19
+	UserPlanNameEconomy      UserPlanName = "economy"
+	UserPlanNamePro          UserPlanName = "pro"
+	UserPlanNameScale        UserPlanName = "scale"
+	UserPlanNameIntermediary UserPlanName = "intermediary"
+
+	UserPlanNameEnterprise4  UserPlanName = "enterprise-4"
+	UserPlanNameEnterprise6  UserPlanName = "enterprise-6"
+	UserPlanNameEnterprise8  UserPlanName = "enterprise-8"
+	UserPlanNameEnterprise12 UserPlanName = "enterprise-12"
+	UserPlanNameEnterprise14 UserPlanName = "enterprise-14"
+	UserPlanNameEnterprise16 UserPlanName = "enterprise-16"
+	UserPlanNameEnterprise18 UserPlanName = "enterprise-18"
+	UserPlanNameEnterprise20 UserPlanName = "enterprise-20"
+	UserPlanNameEnterprise22 UserPlanName = "enterprise-22"
+	UserPlanNameEnterprise24 UserPlanName = "enterprise-24"
+	UserPlanNameEnterprise26 UserPlanName = "enterprise-26"
+	UserPlanNameEnterprise28 UserPlanName = "enterprise-28"
+	UserPlanNameEnterprise30 UserPlanName = "enterprise-30"
+	UserPlanNameEnterprise32 UserPlanName = "enterprise-32"
 )
 
 type AccountPlan struct {
-	ID        UserPlan          `json:"id"`
-	Name      string            `json:"name"`
-	ExpiresAt *time.Time        `json:"expires_at"`
+	Name      UserPlanName      `json:"name"`
+	ExpiresAt time.Time         `json:"expires_at"`
 	Duration  int               `json:"duration"`
 	Memory    AccountPlanMemory `json:"memory"`
 }
@@ -154,7 +152,8 @@ type AccountPlan struct {
 // Flow groups.
 type AccountInfo struct {
 	APIUser
-	Plan                 AccountPlan                   `json:"plan"`
+	// Plan is nil when the account has no plan.
+	Plan                 *AccountPlan                  `json:"plan"`
 	Applications         []Application                 `json:"applications"`
 	Databases            []Database                    `json:"databases"`
 	Connections          []AccountConnection           `json:"connections"`

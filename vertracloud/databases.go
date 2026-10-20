@@ -93,7 +93,7 @@ type Database struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	OwnerID     string          `json:"owner_id"`
-	OwnerPlanID UserPlan        `json:"owner_plan_id"`
+	OwnerPlan   *UserPlanName   `json:"owner_plan"`
 	Status      DatabaseStatus  `json:"status"`
 	RAM         int             `json:"ram"`
 	// Host is e.g. "vertra-cloud-<type>-<dbId>.vertraweb.app".

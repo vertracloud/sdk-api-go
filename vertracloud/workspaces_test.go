@@ -64,7 +64,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name: "Get", wantMethod: http.MethodGet, wantPath: "/v1/workspaces/" + testWorkspaceID,
 			enqueue: func(ft *vertratest.FakeRestClient) {
-				ft.EnqueueJSON(200, `{"id":"`+testWorkspaceID+`","name":"x","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00.000Z","updated_at":"2026-09-22T12:00:00.000Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":[],"is_owner":true,"owner_plan_id":2,"resource_organization":`+orgJSON+`}`)
+				ft.EnqueueJSON(200, `{"id":"`+testWorkspaceID+`","name":"x","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00.000Z","updated_at":"2026-09-22T12:00:00.000Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":[],"is_owner":true,"owner_plan":"pro","resource_organization":`+orgJSON+`}`)
 			},
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Get(ctx, testWorkspaceID)
@@ -74,7 +74,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 		{
 			name: "Create", wantMethod: http.MethodPost, wantPath: "/v1/workspaces",
 			enqueue: func(ft *vertratest.FakeRestClient) {
-				ft.EnqueueJSON(200, `{"id":"`+testWorkspaceID+`","name":"x","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-22T12:00:00Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":[],"is_owner":true,"owner_plan_id":2,"resource_organization":`+orgJSON+`}`)
+				ft.EnqueueJSON(200, `{"id":"`+testWorkspaceID+`","name":"x","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-22T12:00:00Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":[],"is_owner":true,"owner_plan":"pro","resource_organization":`+orgJSON+`}`)
 			},
 			invoke: func(ctx context.Context, svc WorkspacesService) error {
 				_, err := svc.Create(ctx, WorkspaceCreateBody{Name: "x"})
@@ -353,7 +353,7 @@ func TestWorkspaces_RouteMatrix(t *testing.T) {
 
 func TestWorkspaces_CreateAndAcceptDecodeActualResponses(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(201, `{"id":"`+testWorkspaceID+`","name":"Eng","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-22T12:00:00Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":["apps:read"],"is_owner":true,"owner_plan_id":2,"resource_organization":{"scope":"workspace","user_id":"u1","workspace_id":"`+testWorkspaceID+`","folders":[],"favorites":[]}}`)
+	fake.EnqueueJSON(201, `{"id":"`+testWorkspaceID+`","name":"Eng","description":null,"owner_id":"u1","owner":{"display_name":"Ana"},"members_count":1,"deleted_at":null,"frozen":false,"created_at":"2026-09-22T12:00:00Z","updated_at":"2026-09-22T12:00:00Z","members":[],"roles":[],"applications":[],"databases":[],"permissions":["apps:read"],"is_owner":true,"owner_plan":"pro","resource_organization":{"scope":"workspace","user_id":"u1","workspace_id":"`+testWorkspaceID+`","folders":[],"favorites":[]}}`)
 	fake.EnqueueJSON(200, `{"id":"`+testWorkspaceID+`","name":"Eng"}`)
 	svc := newWorkspacesService(fake)
 	created, err := svc.Create(context.Background(), WorkspaceCreateBody{Name: "Eng"})
@@ -441,7 +441,7 @@ func TestWorkspaces_Get_DecodesFullShape(t *testing.T) {
 		"members":[{"user_id":"`+testUserID+`","role_id":"`+testRoleID+`","role_name":"Dev","joined_at":"2026-09-22T12:00:00.000Z","expires_at":null,"user":{"display_name":"Bea","email":"b@x.com"}}],
 		"roles":[{"id":"`+testRoleID+`","workspace_id":"`+testWorkspaceID+`","name":"Dev","permissions":["apps:read"],"preset":"developer","position":0,"members_count":1,"created_at":"2026-09-22T12:00:00.000Z","updated_at":"2026-09-22T12:00:00.000Z"}],
 		"applications":[],"databases":[],
-		"permissions":["apps:read","apps:manage"],"is_owner":true,"owner_plan_id":3,
+		"permissions":["apps:read","apps:manage"],"is_owner":true,"owner_plan":"scale",
 		"resource_organization":{"scope":"workspace","user_id":"u1","workspace_id":"`+testWorkspaceID+`","folders":[],"favorites":[]}
 	}`)
 	svc := newWorkspacesService(fake)
