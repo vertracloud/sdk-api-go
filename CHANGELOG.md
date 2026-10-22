@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0](https://github.com/vertracloud/sdk-api-go/compare/v0.2.2...v0.3.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* plan names and multiple custom domains per app
+
+### Features
+
+* plan names and multiple custom domains per app ([9524c03](https://github.com/vertracloud/sdk-api-go/commit/9524c03c9efecf3fae0fac3b845c764a2471deef))
+
+
+### Bug Fixes
+
+* mask the API key when the client is formatted ([015e7ef](https://github.com/vertracloud/sdk-api-go/commit/015e7efd5d472d3ecf17b0035a603d601ddab6bb))
+* reject empty and dot path segments before sending a request ([ee67285](https://github.com/vertracloud/sdk-api-go/commit/ee6728527899199a0ffb406e7c6e80689a473fc7))
+* **rest:** drop credentials when a redirect leaves the original origin ([28ade71](https://github.com/vertracloud/sdk-api-go/commit/28ade714cb493e86963b8b5049884217ad4873c5))
+
 ## [0.2.2](https://github.com/vertracloud/sdk-api-go/compare/v0.2.1...v0.2.2) (2026-10-18)
 
 
