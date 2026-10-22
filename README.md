@@ -75,7 +75,9 @@ restClient, err := rest.NewClient(apiKey,
 )
 ```
 
-Also available: `rest.WithBaseURL` and `rest.WithUserAgent`. The public status route needs no key:
+Also available: `rest.WithBaseURL` and `rest.WithUserAgent`.
+
+The default HTTP client follows up to 10 redirects and drops `Authorization` (and `Cookie`/`Proxy-Authorization`) as soon as a redirect changes scheme, host or port relative to the original request. A client passed to `rest.WithHTTPClient` is used as is, with its own `CheckRedirect`; Go's default policy keeps `Authorization` across a port change or an https to http downgrade, so set `CheckRedirect` on it if it may follow redirects to another origin. The public status route needs no key:
 
 ```go
 status, err := vertracloud.New(rest.NewPublicClient()).Status.Get(ctx)

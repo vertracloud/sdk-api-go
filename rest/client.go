@@ -67,7 +67,13 @@ func WithBaseURL(baseURL string) ClientOpt {
 }
 
 // WithHTTPClient injects a custom *http.Client, e.g. one with a fake
-// Transport for tests. Default: &http.Client{}.
+// Transport for tests. Default: a client that follows up to 10 redirects and
+// drops credentials when a redirect changes scheme, host or port.
+//
+// The injected client is used as is: its CheckRedirect is not replaced. Go's
+// default policy keeps Authorization across a port change or an https to http
+// downgrade, so a client that may follow redirects to another origin should
+// set CheckRedirect (or http.ErrUseLastResponse) itself.
 func WithHTTPClient(hc *http.Client) ClientOpt {
 	return func(c *clientConfig) {
 		if hc != nil {
@@ -108,6 +114,50 @@ func (c *client) CloneWithBaseURL(baseURL string) Client {
 	clone := *c
 	clone.baseURL = strings.TrimRight(baseURL, "/")
 	return &clone
+}
+
+// maxRedirects mirrors the net/http default limit.
+const maxRedirects = 10
+
+// stripCredentialsOnRedirect is the CheckRedirect of the default client. It
+// keeps the net/http limit of 10 redirects and removes credential headers
+// from the pending request as soon as the chain has left the origin (scheme,
+// host and port) of the ORIGINAL request, so a chain A -> B -> A never sends
+// the token again. net/http rebuilds headers from the original request on
+// every hop, hence the whole chain is checked, not just the previous hop.
+func stripCredentialsOnRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+	origin := via[0].URL
+	left := !sameOrigin(origin, req.URL)
+	for _, v := range via[1:] {
+		if !sameOrigin(origin, v.URL) {
+			left = true
+		}
+	}
+	if left {
+		req.Header.Del("Authorization")
+		req.Header.Del("Proxy-Authorization")
+		req.Header.Del("Cookie")
+	}
+	return nil
+}
+
+func sameOrigin(a, b *url.URL) bool {
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) &&
+		effectivePort(a) == effectivePort(b)
+}
+
+func effectivePort(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return "443"
+	}
+	return "80"
 }
 
 // client is the only implementation of Client in this package.
@@ -151,7 +201,7 @@ func newClient(opts []ClientOpt) *client {
 	cfg := &clientConfig{
 		baseURL:    defaultBaseURL,
 		userAgent:  "vertracloud-sdk-go/" + sdkVersion,
-		httpClient: &http.Client{},
+		httpClient: &http.Client{CheckRedirect: stripCredentialsOnRedirect},
 		timeout:    defaultTimeout,
 	}
 	for _, opt := range opts {
