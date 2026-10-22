@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/vertracloud/sdk-api-go/compare/v0.3.0...v0.3.1) (2026-10-22)
+
+
+### Features
+
+* **apps:** Deno, .NET and Elixir and language on create ([071190f](https://github.com/vertracloud/sdk-api-go/commit/071190f26bab3dfd0a11fbf8f21ec64245db1f21))
+* **apps:** remove CleanupOldRuntimeLanguage from the restart body ([cf2765d](https://github.com/vertracloud/sdk-api-go/commit/cf2765d8d97ce20949388b836866e2801e430b20))
+
 ## [0.3.0](https://github.com/vertracloud/sdk-api-go/compare/v0.2.2...v0.3.0) (2026-10-22)
 
 
