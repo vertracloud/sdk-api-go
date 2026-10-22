@@ -733,6 +733,7 @@ func TestApps_Create_Multipart(t *testing.T) {
 		Memory:      512,
 		Main:        "index.js",
 		Version:     "latest",
+		Language:    ApplicationLanguageDeno,
 		WorkspaceID: "ws_1",
 		Envs:        []ApplicationEnvironmentInput{{Key: "API_KEY", Value: "secret", Note: note}},
 	})
@@ -756,6 +757,9 @@ func TestApps_Create_Multipart(t *testing.T) {
 	}
 	if fileNames["file"] != "app.zip" {
 		t.Errorf("file part filename = %q, want app.zip", fileNames["file"])
+	}
+	if fields["language"] != "deno" {
+		t.Errorf("language field = %q, want deno", fields["language"])
 	}
 	if fields["name"] != "myapp" {
 		t.Errorf("name field = %q, want myapp", fields["name"])
@@ -808,7 +812,7 @@ func TestApps_Create_FromSnapshot(t *testing.T) {
 // as query params / resolved opts (not form fields).
 func TestApps_Files_Upload_Multipart(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z","missing_dependencies":["axios"],"removed_directories":["tmp"]}`)
+	fake.EnqueueJSON(200, `{"app_id":"app_123","updated_at":"2026-09-22T12:00:00.000Z","removed_directories":["tmp"]}`)
 	svc := newAppsService(fake)
 
 	restart := true
@@ -816,7 +820,7 @@ func TestApps_Files_Upload_Multipart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Upload: %v", err)
 	}
-	if got.AppID != testAppID || !got.UpdatedAt.Equal(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)) || len(got.MissingDependencies) != 1 || got.MissingDependencies[0] != "axios" || len(got.RemovedDirectories) != 1 || got.RemovedDirectories[0] != "tmp" {
+	if got.AppID != testAppID || !got.UpdatedAt.Equal(time.Date(2026, 9, 22, 12, 0, 0, 0, time.UTC)) || len(got.RemovedDirectories) != 1 || got.RemovedDirectories[0] != "tmp" {
 		t.Fatalf("Upload response = %#v", got)
 	}
 	if len(fake.Requests) != 1 {

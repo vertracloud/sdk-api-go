@@ -213,8 +213,6 @@ _ = ready
 
 While the app is `building`, actions that build or change it fail with 409 `APP_BUILDING` (`APIError.Code`); deleting is allowed.
 
-`MissingDependencies` is filled only after the build ends.
-
 ### Realtime logs (SSE)
 
 ```go

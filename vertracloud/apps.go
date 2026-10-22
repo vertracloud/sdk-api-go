@@ -134,6 +134,9 @@ const (
 	ApplicationLanguageRuby       ApplicationLanguage = "ruby"
 	ApplicationLanguageJava       ApplicationLanguage = "java"
 	ApplicationLanguageRust       ApplicationLanguage = "rust"
+	ApplicationLanguageDeno       ApplicationLanguage = "deno"
+	ApplicationLanguageDotnet     ApplicationLanguage = "dotnet"
+	ApplicationLanguageElixir     ApplicationLanguage = "elixir"
 )
 
 // ApplicationStatus is one of "up" | "down" | "building".
@@ -268,30 +271,29 @@ type ApplicationShieldCooldown struct {
 // Application is the shape returned by Get and by every
 // mutating route that echoes the app back.
 type Application struct {
-	ID                  string                     `json:"id"`
-	Cluster             ApplicationCluster         `json:"cluster"`
-	Type                ApplicationType            `json:"type"`
-	Name                string                     `json:"name"`
-	Description         string                     `json:"description,omitempty"`
-	OwnerID             string                     `json:"owner_id"`
-	OwnerPlan           *UserPlanName              `json:"owner_plan"`
-	Language            ApplicationLanguage        `json:"language"`
-	RAM                 int                        `json:"ram"`
-	Status              ApplicationStatus          `json:"status"`
-	Subdomain           *string                    `json:"subdomain"`
-	PublicURL           *string                    `json:"public_url"`
-	Github              *ApplicationGithub         `json:"github,omitempty"`
-	Domains             []ApplicationDomain        `json:"domains"`
-	LastSnapshot        *time.Time                 `json:"last_snapshot"`
-	CreatedAt           time.Time                  `json:"created_at"`
-	UpdatedAt           time.Time                  `json:"updated_at"`
-	MainFile            string                     `json:"main_file"`
-	Version             ApplicationVersion         `json:"version"`
-	StartCommand        *string                    `json:"start_command"`
-	BuildCommand        *string                    `json:"build_command"`
-	OfflineSince        *time.Time                 `json:"offline_since"`
-	MissingDependencies []string                   `json:"missing_dependencies,omitempty"`
-	ShieldCooldown      *ApplicationShieldCooldown `json:"shield_cooldown"`
+	ID             string                     `json:"id"`
+	Cluster        ApplicationCluster         `json:"cluster"`
+	Type           ApplicationType            `json:"type"`
+	Name           string                     `json:"name"`
+	Description    string                     `json:"description,omitempty"`
+	OwnerID        string                     `json:"owner_id"`
+	OwnerPlan      *UserPlanName              `json:"owner_plan"`
+	Language       ApplicationLanguage        `json:"language"`
+	RAM            int                        `json:"ram"`
+	Status         ApplicationStatus          `json:"status"`
+	Subdomain      *string                    `json:"subdomain"`
+	PublicURL      *string                    `json:"public_url"`
+	Github         *ApplicationGithub         `json:"github,omitempty"`
+	Domains        []ApplicationDomain        `json:"domains"`
+	LastSnapshot   *time.Time                 `json:"last_snapshot"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	UpdatedAt      time.Time                  `json:"updated_at"`
+	MainFile       string                     `json:"main_file"`
+	Version        ApplicationVersion         `json:"version"`
+	StartCommand   *string                    `json:"start_command"`
+	BuildCommand   *string                    `json:"build_command"`
+	OfflineSince   *time.Time                 `json:"offline_since"`
+	ShieldCooldown *ApplicationShieldCooldown `json:"shield_cooldown"`
 	// Deploy is the deploy behavior: zero downtime, automatic rollback and health check.
 	Deploy ApplicationDeploySettings `json:"deploy"`
 	// LastBuildError is the code of the last build or install failure; nil after a
@@ -660,8 +662,11 @@ type ApplicationCreateParams struct {
 	Memory  int
 	Main    string
 	Version ApplicationVersion
-	Start   string
-	Build   string
+	// Language forces the language; empty lets the platform detect it from the
+	// project manifest.
+	Language ApplicationLanguage
+	Start    string
+	Build    string
 	// WorkspaceID associates the new app with a workspace when set.
 	WorkspaceID string
 	// Subdomain: "random" (or empty) lets the platform pick one.
@@ -925,6 +930,9 @@ func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreatePa
 	}
 	if params.Version != "" {
 		fields = append(fields, multipartField{Name: "version", Value: string(params.Version)})
+	}
+	if params.Language != "" {
+		fields = append(fields, multipartField{Name: "language", Value: string(params.Language)})
 	}
 	if params.Start != "" {
 		fields = append(fields, multipartField{Name: "start", Value: params.Start})
@@ -1315,10 +1323,9 @@ type ApplicationFileUploadParams struct {
 
 // ApplicationFileUploadResponse is the successful response from POST /v1/apps/:id/files/upload.
 type ApplicationFileUploadResponse struct {
-	AppID               string    `json:"app_id"`
-	UpdatedAt           time.Time `json:"updated_at"`
-	MissingDependencies []string  `json:"missing_dependencies,omitempty"`
-	RemovedDirectories  []string  `json:"removed_directories,omitempty"`
+	AppID              string    `json:"app_id"`
+	UpdatedAt          time.Time `json:"updated_at"`
+	RemovedDirectories []string  `json:"removed_directories,omitempty"`
 }
 
 type appsFilesServiceImpl struct{ rest rest.Client }
