@@ -678,7 +678,6 @@ type ApplicationCreateParams struct {
 // No body (or a zero-value
 // ApplicationRestartBody) means a normal restart, reusing the install/build cache.
 type ApplicationRestartBody struct {
-	CleanupOldRuntimeLanguage *ApplicationLanguage `json:"cleanup_old_runtime_language,omitempty"`
 	// ReinstallDependencies reinstalls dependencies from scratch, ignoring
 	// the install cache.
 	ReinstallDependencies *bool `json:"reinstall_dependencies,omitempty"`

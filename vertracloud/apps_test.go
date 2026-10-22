@@ -651,21 +651,17 @@ func TestApps_WaitUntilReady(t *testing.T) {
 	}
 }
 
-func TestApps_RestartBodyCarriesCleanupLanguage(t *testing.T) {
+func TestApps_RestartBodyCarriesReinstallFlag(t *testing.T) {
 	if got := reflect.TypeOf(ApplicationOperationResponse{}.Status).Name(); got != "ResourceOperationStatus" {
 		t.Fatalf("application operation status = %s, want ResourceOperationStatus", got)
 	}
-	field, ok := reflect.TypeOf(ApplicationRestartBody{}).FieldByName("CleanupOldRuntimeLanguage")
-	if !ok || field.Tag.Get("json") != "cleanup_old_runtime_language,omitempty" {
-		t.Fatalf("cleanup_old_runtime_language field missing or incorrectly tagged")
-	}
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueJSON(200, `{"status":"success"}`)
-	language := ApplicationLanguagePython
-	if _, err := newAppsService(fake).Restart(context.Background(), testAppID, &ApplicationRestartBody{CleanupOldRuntimeLanguage: &language}); err != nil {
+	reinstall := true
+	if _, err := newAppsService(fake).Restart(context.Background(), testAppID, &ApplicationRestartBody{ReinstallDependencies: &reinstall}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(fake.Requests[0].Body), `"cleanup_old_runtime_language":"python"`) {
+	if !strings.Contains(string(fake.Requests[0].Body), `"reinstall_dependencies":true`) {
 		t.Fatalf("restart body = %s", fake.Requests[0].Body)
 	}
 }
