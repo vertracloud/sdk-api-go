@@ -457,19 +457,68 @@ func TestApps_FilesTree_DecodesArrayWithoutPathQuery(t *testing.T) {
 
 func TestApps_DeploysWebhookGet_DecodesAPIShape(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app"}`)
+	fake.EnqueueJSON(200, `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app","branch":"main"}`)
 
 	got, err := newAppsService(fake).Deploys().Webhook().Get(context.Background(), testAppID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app"}`
+	want := `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app","branch":"main"}`
 	encoded, err := json.Marshal(got)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(encoded) != want {
 		t.Fatalf("webhook = %s, want %s", encoded, want)
+	}
+}
+
+func TestApps_DeploysWebhookGet_DecodesBranch(t *testing.T) {
+	release := "release"
+	for _, tc := range []struct {
+		name string
+		resp string
+		want *string
+	}{
+		{"null means main or master", `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app","branch":null}`, nil},
+		{"set branch", `{"webhook_url":"https://example.com/hook","repo_owner":"acme","repo_name":"app","branch":"release"}`, &release},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, tc.resp)
+			got, err := newAppsService(fake).Deploys().Webhook().Get(context.Background(), testAppID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if (got.Branch == nil) != (tc.want == nil) || (tc.want != nil && *got.Branch != *tc.want) {
+				t.Fatalf("branch = %v, want %v", got.Branch, tc.want)
+			}
+		})
+	}
+}
+
+func TestApps_DeploysWebhookCreate_BranchIsOptionalInBody(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		branch string
+		want   string
+	}{
+		{"without branch", "", `{"owner":"o","repo_name":"r","repo_id":"1","account_id":"a"}`},
+		{"with branch", "release", `{"owner":"o","repo_name":"r","repo_id":"1","account_id":"a","branch":"release"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, `{"url":"https://example.com/hook"}`)
+			_, err := newAppsService(fake).Deploys().Webhook().Create(context.Background(), testAppID, ApplicationWebhookCreateBody{
+				Owner: "o", RepoName: "r", RepoID: "1", AccountID: "a", Branch: tc.branch,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := string(fake.Requests[0].Body); got != tc.want {
+				t.Fatalf("body = %s, want %s", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -1245,5 +1294,28 @@ func TestApps_UpdateConfig_DeployAbsentNullValue(t *testing.T) {
 				t.Errorf("%s body=%s, want %s", req.Method, req.Body, tc.want)
 			}
 		})
+	}
+}
+
+func TestApps_Network_PublishWithPort_SendsPortOnlyWhenSet(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"subdomain":"web-1","domains":[]}`)
+	fake.EnqueueJSON(200, `{"subdomain":"web-1","domains":[]}`)
+
+	svc := newAppsService(fake).Network()
+	port := 3000
+	if _, err := svc.PublishWithPort(context.Background(), testAppID, "", &port); err != nil {
+		t.Fatalf("PublishWithPort: %v", err)
+	}
+	if _, err := svc.Publish(context.Background(), testAppID, ""); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	withPort := decodeJSONBody(t, fake.Requests[0])
+	if withPort["port"] != float64(3000) {
+		t.Errorf("port = %v, want 3000", withPort["port"])
+	}
+	plain := decodeJSONBody(t, fake.Requests[1])
+	if _, ok := plain["port"]; ok {
+		t.Errorf("Publish sent port = %v, want it omitted", plain["port"])
 	}
 }

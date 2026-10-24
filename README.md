@@ -83,6 +83,21 @@ The default HTTP client follows up to 10 redirects and drops `Authorization` (an
 status, err := vertracloud.New(rest.NewPublicClient()).Status.Get(ctx)
 ```
 
+### Database versions
+
+```go
+catalog, err := client.Databases.Versions(ctx) // keyed by engine type as a string
+if err != nil { /* ... */ }
+dbType := vertracloud.DatabaseTypePostgreSQL
+db, err := client.Databases.Create(ctx, vertracloud.DatabaseCreateBody{
+	Name: "meu-db", Type: &dbType, RAM: 512,
+	Version: catalog["1"].Recommended,
+})
+fmt.Println(db.Version) // major line, e.g. "18"
+```
+
+Omit `Version` to get the recommended one; with `SnapshotID`, leave it empty to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
+
 ### Per-call options
 
 Every method takes a variadic `...rest.RequestOpt` last:
@@ -233,6 +248,66 @@ if err := stream.Err(); err != nil {
 
 Stop the stream by cancelling `ctx`. Pass `rest.WithIdleTimeout(d)` to also stop when no event arrives within `d`, and `&vertracloud.ApplicationRealtimeParams{Since: cursor}` to resume. There is no automatic reconnection.
 
+### Custom Docker images
+
+An image is a build context with a `Dockerfile`, built by the platform. Create and rebuild return right away with `Status` `CustomImageStatusBuilding`; follow the build with `Logs`, or read `Get` until the status leaves `building`.
+
+```go
+f, err := os.Open("context.zip")
+if err != nil {
+	log.Fatal(err)
+}
+defer f.Close()
+
+img, err := client.Images.Create(ctx, vertracloud.ImageCreateParams{
+	Name:        "node-web",
+	Description: "Node 22 with our base packages", // optional, up to 128 characters
+	File:        f, // or GitHubRepository (GitHubBranch is optional), not both
+})
+// With GitHubRepository, GitHubBranch is optional (default: the repository's default branch). A repository in your
+// GitHub App installations is linked and each push to the branch rebuilds the image; a public repository outside
+// them is built once, with no link.
+
+// Read the build log, then run an app from the image
+logs, err := client.Images.Logs(ctx, img.ID, nil)
+if err != nil {
+	log.Fatal(err)
+}
+defer logs.Close()
+for logs.Next(ctx) {
+	fmt.Println(logs.Line())
+}
+
+app, err := client.Apps.CreateFromImage(ctx, vertracloud.ApplicationCreateFromImageParams{
+	ImageID:   img.ID,
+	Name:      "web",
+	Memory:    512,
+	Web:       true,
+	Subdomain: "random",
+})
+
+// Check a Dockerfile before uploading anything (creates nothing)
+res, err := client.Images.Check(ctx, vertracloud.ImageCheckBody{
+	Dockerfile: dockerfile,
+	Files:      []string{"Dockerfile", "index.js"},
+})
+// res.Refusals block the build; res.Warnings do not; res.SuggestedPort is the first EXPOSE (or 80)
+```
+
+`Update` renames the image and/or changes its description without building anything; apps keep running. Send only what changes. `Name` is a `*string`; `Description` is a `*Nullable[string]` (as on the other PATCH bodies), because a plain `*string` with `omitempty` cannot send `null`: `NullableValue("text")` sets it, `NullableNull[string]()` removes it, and `nil` leaves it untouched. A name already used by another of your images fails with `APIError.Code` `VALIDATION_ERROR`.
+
+```go
+name := "node-base"
+img, err := client.Images.Update(ctx, img.ID, vertracloud.ImageUpdateBody{
+	Name:        &name,
+	Description: vertracloud.NullableNull[string](), // remove the description
+})
+```
+
+`Delete` needs `ConfirmName` equal to the image name. It also deletes every app created from the image, so deleting an image that has apps needs the `apps:delete` scope as well. `Create` fails with `APIError.Code` `DOCKERFILE_REFUSED` when the `Dockerfile` has refusals (for example `RUN --network=host`); run `Check` first to see them, or read the findings from the error with `vertracloud.DockerfileRefusedIssues(err)`.
+
+To act on an image of a workspace, pass `rest.WithWorkspaceID(id)` (sent as `?workspace_id=`) to the image routes, or set `WorkspaceID` in `ImageRebuildParams` and `ImageLogsParams`.
+
 ### Errors
 
 Every non-2xx response is a `*rest.APIError` carrying the HTTP `Status`, the API `Code` (e.g. `APP_NOT_FOUND`), `Message` and `Details`:
@@ -292,8 +367,9 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 
 | Domain | Service | Routes |
 |---|---|---|
-| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 40 |
-| Databases | `client.Databases` (+ `.Credentials()`) | 13 |
+| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 41 |
+| Images | `client.Images` | 12 |
+| Databases | `client.Databases` (+ `.Credentials()`) | 14 |
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
 | Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Folders()`, `.Favorites()`) | 30 |

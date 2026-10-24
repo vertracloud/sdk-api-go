@@ -36,10 +36,15 @@ type SnapshotsService interface {
 	Create(ctx context.Context, resourceID string, scope SnapshotScope, opts ...rest.RequestOpt) (ResourceSnapshot, error)
 	// Restore: POST /v1/users/:id/snapshots/:snapshot_id/restore — scope
 	// snapshots:write. No request body; restores into the source resource.
+	// For database snapshots it can fail with SNAPSHOT_VERSION_NEWER.
 	Restore(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error)
 	// RestoreTo is the same route with the optional resource_id body field used
 	// to restore into another resource.
 	RestoreTo(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, targetResourceID string, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error)
+	// RestoreWith is the same route with the body fields of SnapshotRestoreParams:
+	// the optional resource_id, and restore_image_version for an app on a
+	// custom image (the image version of the snapshot, if it still exists).
+	RestoreWith(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, params SnapshotRestoreParams, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error)
 }
 
 func newSnapshotsService(rc rest.Client) SnapshotsService {
@@ -104,8 +109,31 @@ type GroupedResourceSnapshots struct {
 	Snapshots    []ResourceSnapshot `json:"snapshots"`
 }
 
+// SnapshotRestoreParams are the body fields of SnapshotsService.RestoreWith.
+// A zero value sends no body, like Restore.
+type SnapshotRestoreParams struct {
+	// TargetResourceID restores into another resource of the same kind. Empty restores into the source.
+	TargetResourceID string
+	// RestoreImageVersion also goes back to the image version the app ran when
+	// the snapshot was taken, if it still exists. Only for an app on a custom
+	// image; false restores the data only.
+	RestoreImageVersion bool
+}
+
+// SnapshotImageWarning is a warning about a snapshot of an app on a custom image.
+type SnapshotImageWarning string
+
+const (
+	// SnapshotImageWarningImageVersionNotFound: the image version recorded in
+	// the snapshot was removed by retention, so the app stays on its current version.
+	SnapshotImageWarningImageVersionNotFound SnapshotImageWarning = "IMAGE_VERSION_NOT_FOUND"
+)
+
 type SnapshotRestoreResponse struct {
 	Message string `json:"message"`
+	// Warning is set when RestoreImageVersion was requested but the recorded
+	// image version no longer exists: only the data was restored. Nil otherwise.
+	Warning *SnapshotImageWarning `json:"warning,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -162,14 +190,19 @@ func (s *snapshotsServiceImpl) Restore(ctx context.Context, resourceID, snapshot
 }
 
 func (s *snapshotsServiceImpl) RestoreTo(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, targetResourceID string, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error) {
+	return s.RestoreWith(ctx, resourceID, snapshotID, scope, SnapshotRestoreParams{TargetResourceID: targetResourceID}, opts...)
+}
+
+func (s *snapshotsServiceImpl) RestoreWith(ctx context.Context, resourceID, snapshotID string, scope SnapshotScope, params SnapshotRestoreParams, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error) {
 	path := snapshotsPath(resourceID, "/"+url.PathEscape(snapshotID)+"/restore")
 	var body io.Reader
 	contentType := ""
 	var err error
-	if targetResourceID != "" {
+	if params.TargetResourceID != "" || params.RestoreImageVersion {
 		body, err = snapshotJSONBody(struct {
-			ResourceID string `json:"resource_id"`
-		}{ResourceID: targetResourceID})
+			ResourceID          string `json:"resource_id,omitempty"`
+			RestoreImageVersion bool   `json:"restore_image_version,omitempty"`
+		}{ResourceID: params.TargetResourceID, RestoreImageVersion: params.RestoreImageVersion})
 		if err != nil {
 			return SnapshotRestoreResponse{}, err
 		}

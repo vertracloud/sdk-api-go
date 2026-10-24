@@ -165,6 +165,51 @@ func TestDatabases_RouteMatrix(t *testing.T) {
 	}
 }
 
+func TestDatabases_Versions_DecodesCatalog(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"1":{"recommended":"18","available":["18","17"]},"4":{"recommended":"9.7","available":["9.7","8.4"]}}`)
+	svc := newDatabasesService(fake)
+
+	got, err := svc.Versions(context.Background())
+	if err != nil {
+		t.Fatalf("Versions: %v", err)
+	}
+	if fake.Requests[0].Method != http.MethodGet || fake.Requests[0].Path != "/v1/databases/versions" {
+		t.Errorf("request = %s %s", fake.Requests[0].Method, fake.Requests[0].Path)
+	}
+	if got["1"].Recommended != "18" || !reflect.DeepEqual(got["4"].Available, []string{"9.7", "8.4"}) {
+		t.Errorf("catalog = %+v", got)
+	}
+}
+
+func TestDatabases_Create_VersionSentOnlyWhenSet(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"1","name":"a","version":"17"}`)
+	fake.EnqueueJSON(200, `{"id":"2","name":"b","version":"18"}`)
+	svc := newDatabasesService(fake)
+
+	dbType := DatabaseTypePostgreSQL
+	db, err := svc.Create(context.Background(), DatabaseCreateBody{Name: "a", Type: &dbType, RAM: 512, Version: "17"})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if db.Version != "17" {
+		t.Errorf("decoded version = %q, want 17", db.Version)
+	}
+	if _, err := svc.Create(context.Background(), DatabaseCreateBody{Name: "b", Type: &dbType, RAM: 512}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	var sent, omitted map[string]any
+	_ = json.Unmarshal(fake.Requests[0].Body, &sent)
+	_ = json.Unmarshal(fake.Requests[1].Body, &omitted)
+	if sent["version"] != "17" {
+		t.Errorf("body version = %v, want 17", sent["version"])
+	}
+	if _, ok := omitted["version"]; ok {
+		t.Errorf("version must be omitted when empty, body = %v", omitted)
+	}
+}
+
 func TestDatabases_Update_DecodesStatusResponse(t *testing.T) {
 	if got := reflect.TypeOf(DatabaseOperationResponse{}.Status).Name(); got != "ResourceOperationStatus" {
 		t.Fatalf("database operation status = %s, want ResourceOperationStatus", got)

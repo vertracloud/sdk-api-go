@@ -15,7 +15,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// AppsService groups every /v1/apps/* route (42 routes: runtimes, status,
+// AppsService groups every /v1/apps/* route (43 routes: runtimes, status,
 // realtime, metrics, logs, download, deploys, network, domains, envs, files, releases).
 //
 // Nested resources (deploys, network, envs, files, releases, and their own children)
@@ -51,6 +51,10 @@ type AppsService interface {
 	// ApplicationCreateParams for the File/SnapshotID exclusivity rule. The API
 	// replies 202 with Status "building"; use WaitUntilReady to follow the build.
 	Create(ctx context.Context, params ApplicationCreateParams, opts ...rest.RequestOpt) (Application, error)
+	// CreateFromImage: POST /v1/apps/image — scope apps:write. The app runs from
+	// a custom image (see ImagesService). The API replies 202 with Status
+	// "building"; follow it with WaitUntilReady.
+	CreateFromImage(ctx context.Context, params ApplicationCreateFromImageParams, opts ...rest.RequestOpt) (Application, error)
 	// WaitUntilReady polls Get until the app leaves "building". It returns the app
 	// when "up", an *AppNotReadyError when "down", and ctx.Err() when ctx ends
 	// (bound it with context.WithTimeout). opts may be nil.
@@ -299,6 +303,12 @@ type Application struct {
 	// LastBuildError is the code of the last build or install failure; nil after a
 	// successful build. The detail is in the app log.
 	LastBuildError *ApplicationBuildError `json:"last_build_error"`
+	// CustomImage is set when the app runs from a custom image; nil otherwise.
+	CustomImage *ApplicationCustomImage `json:"custom_image"`
+	// Warning is set only by Apps.Create from a snapshot of an app on a custom
+	// image, when the recorded image version no longer exists: the app uses
+	// the image's current version. Nil otherwise.
+	Warning *SnapshotImageWarning `json:"warning,omitempty"`
 }
 
 // ApplicationBuildError is the code of an application's last build or install failure.
@@ -610,6 +620,9 @@ type ApplicationWebhook struct {
 	WebhookURL string `json:"webhook_url"`
 	RepoOwner  string `json:"repo_owner"`
 	RepoName   string `json:"repo_name"`
+	// Branch is the only branch the auto-deploy reacts to. nil is a link created
+	// without one: it reacts to a push on main or master, as it always did.
+	Branch *string `json:"branch"`
 }
 
 type ApplicationSubdomainResponse struct {
@@ -725,12 +738,15 @@ type ApplicationPurgeCacheBody struct {
 }
 
 // ApplicationWebhookCreateBody is the body of POST /v1/apps/:id/deploys/webhook.
-// All four fields are required.
+// The first four fields are required. Branch is optional: without it a push on main or
+// master deploys, as it always did; with it, only a push on that branch does. Linking
+// again with another Branch changes it; linking again without one goes back to main or master.
 type ApplicationWebhookCreateBody struct {
 	Owner     string `json:"owner"`
 	RepoName  string `json:"repo_name"`
 	RepoID    string `json:"repo_id"`
 	AccountID string `json:"account_id"`
+	Branch    string `json:"branch,omitempty"`
 }
 
 // ApplicationFileWriteBody is the body of PUT /v1/apps/:id/files.
@@ -961,6 +977,18 @@ func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreatePa
 	return rest.DecodeJSON[Application](data)
 }
 
+func (s *appsServiceImpl) CreateFromImage(ctx context.Context, params ApplicationCreateFromImageParams, opts ...rest.RequestOpt) (Application, error) {
+	payload, err := json.Marshal(params)
+	if err != nil {
+		return Application{}, fmt.Errorf("vertracloud: encode request body: %w", err)
+	}
+	data, err := s.rest.Do(ctx, http.MethodPost, "/v1/apps/image", nil, bytes.NewReader(payload), "application/json", opts...)
+	if err != nil {
+		return Application{}, err
+	}
+	return rest.DecodeJSON[Application](data)
+}
+
 func (s *appsServiceImpl) Start(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationOperationResponse, error) {
 	data, err := s.rest.Do(ctx, http.MethodPost, appPath(id, "/start"), nil, nil, "", opts...)
 	if err != nil {
@@ -1089,6 +1117,10 @@ type AppsNetworkService interface {
 	// subdomain empty lets the platform pick one (Pro plan is always random;
 	// Scale can choose).
 	Publish(ctx context.Context, id, subdomain string, opts ...rest.RequestOpt) (ApplicationWebPublish, error)
+	// PublishWithPort is Publish plus the port the app listens on (1–65535).
+	// Required for an app on a custom image created without web; ignored for
+	// other apps. A nil port leaves it out.
+	PublishWithPort(ctx context.Context, id, subdomain string, port *int, opts ...rest.RequestOpt) (ApplicationWebPublish, error)
 	// Unpublish: DELETE /v1/apps/:id/network/publish — scope apps:write.
 	// Frees the subdomain, removes the custom domains, and makes the app
 	// private.
@@ -1128,9 +1160,14 @@ func (n *appsNetworkServiceImpl) SetSubdomain(ctx context.Context, id, subdomain
 }
 
 func (n *appsNetworkServiceImpl) Publish(ctx context.Context, id, subdomain string, opts ...rest.RequestOpt) (ApplicationWebPublish, error) {
+	return n.PublishWithPort(ctx, id, subdomain, nil, opts...)
+}
+
+func (n *appsNetworkServiceImpl) PublishWithPort(ctx context.Context, id, subdomain string, port *int, opts ...rest.RequestOpt) (ApplicationWebPublish, error) {
 	body := struct {
 		Subdomain string `json:"subdomain,omitempty"`
-	}{Subdomain: subdomain}
+		Port      *int   `json:"port,omitempty"`
+	}{Subdomain: subdomain, Port: port}
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return ApplicationWebPublish{}, fmt.Errorf("vertracloud: encode request body: %w", err)
@@ -1325,6 +1362,20 @@ type ApplicationFileUploadResponse struct {
 	AppID              string    `json:"app_id"`
 	UpdatedAt          time.Time `json:"updated_at"`
 	RemovedDirectories []string  `json:"removed_directories,omitempty"`
+	// ImageBuild is set only when the app runs a custom image: the upload was
+	// a commit that rebuilds the image. Nil for a regular app.
+	ImageBuild *ApplicationImageBuild `json:"image_build,omitempty"`
+	// Message is a readable summary, for example that the image is rebuilding.
+	// Empty when the API sends none.
+	Message string `json:"message,omitempty"`
+}
+
+// ApplicationImageBuild is the image build started by a commit to an app on a
+// custom image. Follow it with ImagesService.Logs(ctx, ImageID, ...) and the
+// BuildID is the version it produces.
+type ApplicationImageBuild struct {
+	ImageID string `json:"image_id"`
+	BuildID string `json:"build_id"`
 }
 
 type appsFilesServiceImpl struct{ rest rest.Client }

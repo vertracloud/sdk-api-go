@@ -12,7 +12,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// DatabasesService groups every /v1/databases/* route (13 routes: status,
+// DatabasesService groups every /v1/databases/* route (14 routes: status,
 // metrics, lifecycle, credentials).
 //
 // Credentials is a nested resource, exposed as a method returning its own
@@ -21,6 +21,11 @@ import (
 type DatabasesService interface {
 	// StatusAll: GET /v1/databases/status — scope databases:read.
 	StatusAll(ctx context.Context, opts ...rest.RequestOpt) ([]DatabaseStatusShort, error)
+	// Versions: GET /v1/databases/versions — scope databases:read. The catalog
+	// is keyed by engine type; each entry has the recommended line and the
+	// lines available for new databases. A database's version cannot be
+	// changed after creation; security updates are applied on stop/start.
+	Versions(ctx context.Context, opts ...rest.RequestOpt) (DatabaseVersions, error)
 	// Get: GET /v1/databases/:id — scope databases:read.
 	Get(ctx context.Context, id string, opts ...rest.RequestOpt) (Database, error)
 	// Status: GET /v1/databases/:id/status — scope databases:read.
@@ -105,7 +110,24 @@ type Database struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 	LastSnapshot *time.Time `json:"last_snapshot"`
 	OfflineSince *time.Time `json:"offline_since"`
+	// Version is the engine major line (e.g. "18", "8.0"); the patch is never
+	// exposed. It is not limited to the catalog: older databases may report a
+	// line that is no longer offered for new ones.
+	Version string `json:"version"`
 }
+
+// DatabaseVersionCatalog lists the versions of one engine.
+type DatabaseVersionCatalog struct {
+	// Recommended is used when DatabaseCreateBody.Version is omitted.
+	Recommended string `json:"recommended"`
+	// Available holds every line that can be chosen for a new database.
+	Available []string `json:"available"`
+}
+
+// DatabaseVersions is the response of GET /v1/databases/versions, keyed by
+// the engine type as a string ("1" PostgreSQL, "2" MongoDB, "3" Redis, "4"
+// MySQL).
+type DatabaseVersions map[string]DatabaseVersionCatalog
 
 type DatabaseNetwork struct {
 	Total string `json:"total"`
@@ -171,6 +193,11 @@ type DatabasePasswordReset struct {
 // its volume; when set, Type is optional but must match the snapshot's
 // engine if provided (server-side validation: SNAPSHOT_TYPE_MISMATCH). This
 // SDK does not duplicate that check.
+//
+// Version is the engine major line (see Versions). Omitted, the recommended
+// one is used; with SnapshotID, leave it empty to keep the snapshot's line
+// (an older one fails with SNAPSHOT_VERSION_NEWER). A value outside the
+// catalog fails with INVALID_DATABASE_VERSION.
 type DatabaseCreateBody struct {
 	Name        string            `json:"name"`
 	Description *Nullable[string] `json:"description,omitempty"`
@@ -179,6 +206,7 @@ type DatabaseCreateBody struct {
 	RAM         int    `json:"ram"`
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	SnapshotID  string `json:"snapshot_id,omitempty"`
+	Version     string `json:"version,omitempty"`
 }
 
 // DatabaseUpdateBody is the body of PUT /v1/databases/:id. Every field is
@@ -208,6 +236,14 @@ func (s *databasesServiceImpl) StatusAll(ctx context.Context, opts ...rest.Reque
 		return nil, err
 	}
 	return rest.DecodeJSON[[]DatabaseStatusShort](data)
+}
+
+func (s *databasesServiceImpl) Versions(ctx context.Context, opts ...rest.RequestOpt) (DatabaseVersions, error) {
+	data, err := s.rest.Do(ctx, http.MethodGet, "/v1/databases/versions", nil, nil, "", opts...)
+	if err != nil {
+		return nil, err
+	}
+	return rest.DecodeJSON[DatabaseVersions](data)
 }
 
 func (s *databasesServiceImpl) Get(ctx context.Context, id string, opts ...rest.RequestOpt) (Database, error) {
