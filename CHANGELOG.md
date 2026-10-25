@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/vertracloud/sdk-api-go/compare/v0.3.1...v0.3.2) (2026-10-25)
+
+
+### Features
+
+* add images resource and database engine versions ([204092d](https://github.com/vertracloud/sdk-api-go/commit/204092de47db26246b41096d6d5ddd919691d084))
+
 ## [0.3.1](https://github.com/vertracloud/sdk-api-go/compare/v0.3.0...v0.3.1) (2026-10-22)
 
 
