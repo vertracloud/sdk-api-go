@@ -50,7 +50,7 @@ type ImagesService interface {
 	// that replaces the whole build context. Refused with
 	// IMAGE_BUILD_IN_PROGRESS while a build runs. Apps are not restarted.
 	Rebuild(ctx context.Context, id string, params ImageRebuildParams, opts ...rest.RequestOpt) (CustomImage, error)
-	// Delete: DELETE /v1/images/:id — scope images:write. The image, its
+	// Delete: DELETE /v1/images/:id — scope images:delete. The image, its
 	// versions and its context are deleted, and so is every app created from
 	// it: an image with apps also needs apps:delete. body.ConfirmName must equal
 	// the image name (IMAGE_NAME_MISMATCH otherwise).
