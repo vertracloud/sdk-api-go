@@ -22,6 +22,11 @@ import (
 // Status CustomImageStatusBuilding. Follow it with Logs, or read Get until the
 // status leaves "building".
 //
+// An image that came from a template (CustomImage.Kind "template_copy", or a
+// platform image) cannot be renamed, rebuilt, linked to GitHub or committed to:
+// those calls fail with IMAGE_TEMPLATE_ONLY. Deleting an image that is the source
+// of one of your private templates fails with IMAGE_IN_USE.
+//
 // To act on an image of a workspace, pass rest.WithWorkspaceID (sent as the
 // workspace_id query parameter) on List, Get, Update, Rebuild, Delete, Versions, Logs,
 // Context, LinkGitHub and UnlinkGitHub. Rebuild and Logs also take it in their
@@ -198,6 +203,26 @@ const (
 	CustomImageStatusFailed CustomImageStatus = "failed"
 )
 
+// CustomImageKind says where an image comes from. "own" is built from your own
+// context; "template_copy" is the slot an image of a template takes in your
+// account: it cannot be rebuilt or edited (IMAGE_TEMPLATE_ONLY), and it goes
+// away when the last application that uses it does.
+type CustomImageKind string
+
+const (
+	CustomImageKindOwn          CustomImageKind = "own"
+	CustomImageKindTemplateCopy CustomImageKind = "template_copy"
+)
+
+// CustomImageOrigin is the readable origin of an image that came from a template.
+type CustomImageOrigin struct {
+	TemplateID string `json:"template_id"`
+	// TemplateName is the name of the template, as shown in the list.
+	TemplateName TemplateI18nText `json:"template_name"`
+	// AuthorDisplay is the author as shown to you; nil for a template of the platform.
+	AuthorDisplay *string `json:"author_display"`
+}
+
 // CustomImageBuildSource is what triggered the build that produced a version.
 type CustomImageBuildSource string
 
@@ -271,6 +296,10 @@ type CustomImage struct {
 	// Description is the free-text description (up to 128 characters); nil when the image has none.
 	Description *string          `json:"description"`
 	Owner       CustomImageOwner `json:"owner"`
+	// Kind is "own" or "template_copy"; empty in older payloads, where it means "own".
+	Kind CustomImageKind `json:"kind,omitempty"`
+	// Origin is the template the image came from when Kind is "template_copy"; nil otherwise.
+	Origin *CustomImageOrigin `json:"origin,omitempty"`
 	// Status is the state of the latest build.
 	Status CustomImageStatus `json:"status"`
 	// Error is the readable reason of the latest failed build; nil when it did not fail.

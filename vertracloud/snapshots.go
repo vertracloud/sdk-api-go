@@ -94,6 +94,12 @@ type ResourceSnapshot struct {
 	// not follow renames and is nil for snapshots taken before this field
 	// existed.
 	ResourceName *string `json:"resource_name"`
+	// Closed is true for a snapshot of an application that came from a closed
+	// template. It cannot be downloaded (not even after the application is
+	// deleted), only restores into an application of the same template, and an
+	// application created from it stays closed; anything else fails with
+	// TEMPLATE_CLOSED.
+	Closed bool `json:"closed,omitempty"`
 }
 
 // GroupedResourceSnapshots is every snapshot of

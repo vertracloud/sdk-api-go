@@ -3,7 +3,7 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/vertracloud/sdk-api-go.svg)](https://pkg.go.dev/github.com/vertracloud/sdk-api-go)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Official Go SDK for the [Vertra Cloud](https://vertracloud.app) public API: apps, databases, snapshots, account, workspaces and billing — one typed method per route.
+Official Go SDK for the [Vertra Cloud](https://vertracloud.app) public API: apps, databases, templates, stacks, snapshots, account, workspaces and billing — one typed method per route.
 
 - Every call takes a `context.Context`.
 - Zero dependencies outside the standard library.
@@ -308,6 +308,66 @@ img, err := client.Images.Update(ctx, img.ID, vertracloud.ImageUpdateBody{
 
 To act on an image of a workspace, pass `rest.WithWorkspaceID(id)` (sent as `?workspace_id=`) to the image routes, or set `WorkspaceID` in `ImageRebuildParams` and `ImageLogsParams`.
 
+### Templates
+
+A template describes what to create: one application, or a stack with applications, databases and a Blob folder. `Deploy` returns a job right away; follow it with `Deploys().Events` (Server-Sent Events) or read `Deploys().Get`. A job that fails is undone as a whole.
+
+```go
+page, err := client.Templates.List(ctx, &vertracloud.TemplateListParams{
+	Category: vertracloud.TemplateCategoryBots,
+	Sort:     vertracloud.TemplateSortPopular,
+})
+
+job, err := client.Templates.Deploy(ctx, "n8n", vertracloud.TemplateDeployBody{
+	Name:           "my-n8n",
+	Inputs:         map[string]vertracloud.TemplateInputValue{"admin_email": "me@example.com"},
+	IdempotencyKey: "deploy-my-n8n-1", // repeating the call returns the same job
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+stream, err := client.Templates.Deploys().Events(ctx, job.ID)
+if err != nil {
+	log.Fatal(err)
+}
+defer stream.Close()
+for stream.Next(ctx) {
+	ev := stream.Event()
+	fmt.Println(ev.Status, ev.CurrentStep)
+}
+job, err = client.Templates.Deploys().Get(ctx, job.ID) // outputs are read here, never on the stream
+```
+
+Outputs marked `Once` come back on the first read of a finished job and are empty afterwards. The public catalog (`List`, `Get`, `Categories`, `Versions`) also works with `rest.NewPublicClient`.
+
+Private templates: `Create` and `NewVersion` take the manifest and one ZIP per service that runs code (`Sources`); `FromApp` and `FromStack` save what you already run (read `AppDraft` / `StackDraft` first to review the variables). `ShareLinks()` creates, lists and revokes links; `Share()` previews, uses, copies or reports what a link gives. `Updates()` reads and runs the update of an app or stack that came from a template, and detaches it. `Validate` checks a manifest without creating anything; the findings of a refused one are in `vertracloud.TemplateManifestIssues(err)`.
+
+An application that came from an open template stops receiving versions when its code is changed. The calls that change code (`Files().Write`, `Move`, `Delete`, `Upload` and `Deploys().Webhook().Create`) fail with `TEMPLATE_DETACH_CONFIRMATION_REQUIRED` until you set `ConfirmDetach: true`.
+
+### Stacks
+
+A stack groups applications, databases and Blob folders, and keeps the connection variables of each application up to date. Changes that alter variables or certificates return `RestartRequired` and `AppsToRestart`: an application reads them only when it starts, so the restart is yours to ask for.
+
+```go
+change, err := client.Stacks.Create(ctx, vertracloud.StackCreateBody{
+	Name:    "shop",
+	Members: []vertracloud.StackMemberRef{
+		{ResourceType: vertracloud.StackMemberTypeApplication, ResourceID: appID},
+		{ResourceType: vertracloud.StackMemberTypeDatabase, ResourceID: dbID},
+	},
+	Bindings: []vertracloud.StackConnectionInput{{
+		StackBindingInput: vertracloud.StackBindingInput{AppID: appID},
+		DatabaseID:        dbID,
+	}},
+})
+if err == nil && change.RestartRequired {
+	fmt.Println("restart:", change.AppsToRestart)
+}
+```
+
+`Delete` needs `ConfirmName` equal to the stack name; `StackDeleteModeDissolve` removes only the stack, `StackDeleteModeDeleteAll` deletes the members too. `Members()`, `Bindings()` and `Snapshots()` group the routes of members, connections and whole-stack snapshots; `Connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `Workspaces.Stacks()` and `Workspaces.Templates()`. Error codes of both areas are the `vertracloud.ErrCode*` constants.
+
 ### Errors
 
 Every non-2xx response is a `*rest.APIError` carrying the HTTP `Status`, the API `Code` (e.g. `APP_NOT_FOUND`), `Message` and `Details`:
@@ -369,10 +429,12 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 |---|---|---|
 | Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 41 |
 | Images | `client.Images` | 12 |
+| Templates | `client.Templates` (+ `.Deploys()`, `.ShareLinks()`, `.Share()`, `.Updates()`) | 32 |
+| Stacks | `client.Stacks` (+ `.Members()`, `.Bindings()`, `.Snapshots()`) | 20 |
 | Databases | `client.Databases` (+ `.Credentials()`) | 14 |
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
-| Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Folders()`, `.Favorites()`) | 30 |
+| Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Templates()`, `.Stacks()`, `.Folders()`, `.Favorites()`) | 34 |
 | Billing | `client.Billing` (+ `.Orders()`) | 7 |
 | Public status | `client.Status` | 1 |
 

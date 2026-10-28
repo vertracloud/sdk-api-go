@@ -25,8 +25,7 @@ type CapturedCall struct {
 	// assert a domain method threaded rest.WithWorkspaceID through without
 	// inspecting opts itself.
 	WorkspaceID string
-	// Header holds the headers set through rest.WithHeader (streamed calls
-	// only).
+	// Header holds the headers set through rest.WithHeader.
 	Header http.Header
 }
 
@@ -85,13 +84,15 @@ func (f *FakeRestClient) Do(ctx context.Context, method, path string, query url.
 		}
 		b = read
 	}
+	cfg := resolve(opts)
 	f.Requests = append(f.Requests, CapturedCall{
 		Method:      method,
 		Path:        path,
 		Query:       query,
 		Body:        b,
 		ContentType: contentType,
-		WorkspaceID: resolve(opts).WorkspaceID,
+		WorkspaceID: cfg.WorkspaceID,
+		Header:      cfg.Header,
 	})
 	return f.next(method, path)
 }

@@ -53,7 +53,9 @@ type AppsService interface {
 	Create(ctx context.Context, params ApplicationCreateParams, opts ...rest.RequestOpt) (Application, error)
 	// CreateFromImage: POST /v1/apps/image — scope apps:write. The app runs from
 	// a custom image (see ImagesService). The API replies 202 with Status
-	// "building"; follow it with WaitUntilReady.
+	// "building"; follow it with WaitUntilReady. An image that belongs to a
+	// template (a platform image or a template copy) fails with
+	// IMAGE_TEMPLATE_ONLY: use the template instead.
 	CreateFromImage(ctx context.Context, params ApplicationCreateFromImageParams, opts ...rest.RequestOpt) (Application, error)
 	// WaitUntilReady polls Get until the app leaves "building". It returns the app
 	// when "up", an *AppNotReadyError when "down", and ctx.Err() when ctx ends
@@ -305,6 +307,12 @@ type Application struct {
 	LastBuildError *ApplicationBuildError `json:"last_build_error"`
 	// CustomImage is set when the app runs from a custom image; nil otherwise.
 	CustomImage *ApplicationCustomImage `json:"custom_image"`
+	// StackID is the stack the application belongs to; nil when it is not in one.
+	StackID *string `json:"stack_id,omitempty"`
+	// StackServiceKey is the id of the service of the stack's template this application is; nil when the user added it.
+	StackServiceKey *string `json:"stack_service_key,omitempty"`
+	// Template is the template the application was created from; nil for an application that did not come from one.
+	Template *ApplicationTemplate `json:"template,omitempty"`
 	// Warning is set only by Apps.Create from a snapshot of an app on a custom
 	// image, when the recorded image version no longer exists: the app uses
 	// the image's current version. Nil otherwise.
@@ -412,11 +420,25 @@ func (c ApplicationFileContent) Bytes() ([]byte, error) {
 }
 
 type ApplicationEnvironment struct {
-	ID        string    `json:"id"`
-	Key       string    `json:"key"`
-	Value     string    `json:"value"`
-	Note      *string   `json:"note"`
-	CreatedAt time.Time `json:"created_at"`
+	ID    string  `json:"id"`
+	Key   string  `json:"key"`
+	Value string  `json:"value"`
+	Note  *string `json:"note"`
+	// ManagedBy is set when the variable is managed by a connection of a
+	// stack: the platform keeps it up to date. Editing it by hand turns it
+	// into an ordinary variable. Nil for a variable you own.
+	ManagedBy *ApplicationEnvironmentManager `json:"managed_by,omitempty"`
+	CreatedAt time.Time                      `json:"created_at"`
+}
+
+// ApplicationEnvironmentManager is the connection that manages an environment variable.
+type ApplicationEnvironmentManager struct {
+	// Type is "stack_binding".
+	Type      string `json:"type"`
+	BindingID string `json:"binding_id"`
+	// StackID is the stack of the connection; nil for the address variable of
+	// an application that is not in a stack.
+	StackID *string `json:"stack_id"`
 }
 
 // ApplicationEnvironmentInput is one entry of the Apps.Envs().Set body.
@@ -747,6 +769,8 @@ type ApplicationWebhookCreateBody struct {
 	RepoID    string `json:"repo_id"`
 	AccountID string `json:"account_id"`
 	Branch    string `json:"branch,omitempty"`
+	// ConfirmDetach: see ApplicationFileWriteBody.ConfirmDetach.
+	ConfirmDetach bool `json:"confirm_detach,omitempty"`
 }
 
 // ApplicationFileWriteBody is the body of PUT /v1/apps/:id/files.
@@ -756,6 +780,17 @@ type ApplicationFileWriteBody struct {
 	Path         string     `json:"path"`
 	Content      *string    `json:"content,omitempty"`
 	LastModified *time.Time `json:"last_modified,omitempty"`
+	// ConfirmDetach confirms that the change detaches the application from its
+	// template. An application that came from an open template (one that lets
+	// you change the code) stops receiving versions of the template when its
+	// code is changed: without ConfirmDetach set to true the call fails with
+	// 409 TEMPLATE_DETACH_CONFIRMATION_REQUIRED and changes nothing (see
+	// TemplateDetachConfirmationAction); with it the change is made and the
+	// application is detached. Ignored for an application that does not come
+	// from a template. The same field exists on ApplicationFileMoveBody,
+	// ApplicationFileDeleteBody, ApplicationFileUploadParams and
+	// ApplicationWebhookCreateBody.
+	ConfirmDetach bool `json:"confirm_detach,omitempty"`
 }
 
 // ApplicationFileListParams contains the optional file-list filter.
@@ -767,12 +802,16 @@ type ApplicationFileReadParams struct{ Path string }
 // ApplicationFileDeleteBody is the JSON body of DELETE /v1/apps/:id/files.
 type ApplicationFileDeleteBody struct {
 	Path string `json:"path"`
+	// ConfirmDetach: see ApplicationFileWriteBody.ConfirmDetach.
+	ConfirmDetach bool `json:"confirm_detach,omitempty"`
 }
 
 // ApplicationFileMoveBody is the body of PATCH /v1/apps/:id/files.
 type ApplicationFileMoveBody struct {
 	Path string `json:"path"`
 	To   string `json:"to"`
+	// ConfirmDetach: see ApplicationFileWriteBody.ConfirmDetach.
+	ConfirmDetach bool `json:"confirm_detach,omitempty"`
 }
 
 // ApplicationReleasesListParams contains the optional filters of AppsReleasesService.List.
@@ -1355,6 +1394,9 @@ type ApplicationFileUploadParams struct {
 	// Message is the commit message shown in the release history. Optional, up
 	// to 500 characters; sent only when non-empty.
 	Message string
+	// ConfirmDetach: see ApplicationFileWriteBody.ConfirmDetach. Sent as the confirm_detach
+	// query parameter, only when true.
+	ConfirmDetach bool
 }
 
 // ApplicationFileUploadResponse is the successful response from POST /v1/apps/:id/files/upload.
@@ -1441,6 +1483,9 @@ func (f *appsFilesServiceImpl) Upload(ctx context.Context, id string, params App
 	q := url.Values{}
 	addQueryBool(q, "restart", params.Restart)
 	addQueryParam(q, "path", params.Path)
+	if params.ConfirmDetach {
+		q.Set("confirm_detach", "true")
+	}
 	fields := []multipartField{{Name: "file", FileName: params.FileName, Reader: params.File}}
 	if params.Message != "" {
 		fields = append(fields, multipartField{Name: "message", Value: params.Message})

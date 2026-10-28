@@ -25,6 +25,8 @@ import (
 type Client struct {
 	Apps       AppsService
 	Images     ImagesService
+	Templates  TemplatesService
+	Stacks     StacksService
 	Databases  DatabasesService
 	Snapshots  SnapshotsService
 	Account    AccountService
@@ -75,6 +77,8 @@ func New(restClient rest.Client, opts ...Option) *Client {
 	return &Client{
 		Apps:       newAppsService(restClient),
 		Images:     newImagesService(restClient),
+		Templates:  newTemplatesService(restClient),
+		Stacks:     newStacksService(restClient),
 		Databases:  newDatabasesService(restClient),
 		Snapshots:  newSnapshotsService(restClient),
 		Account:    newAccountService(restClient),

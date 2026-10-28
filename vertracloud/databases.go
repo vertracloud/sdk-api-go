@@ -114,6 +114,10 @@ type Database struct {
 	// exposed. It is not limited to the catalog: older databases may report a
 	// line that is no longer offered for new ones.
 	Version string `json:"version"`
+	// StackID is the stack the database belongs to; nil when it is not in one.
+	StackID *string `json:"stack_id,omitempty"`
+	// StackServiceKey is the id of the service of the stack's template this database is; nil when the user added it.
+	StackServiceKey *string `json:"stack_service_key,omitempty"`
 }
 
 // DatabaseVersionCatalog lists the versions of one engine.
@@ -177,8 +181,18 @@ type DatabaseMetric struct {
 	Network []float64 `json:"network"`
 }
 
+// DatabaseCertificateReset is the new certificate after a reset, with the
+// applications of stacks connected to the database that must restart to read it.
+type DatabaseCertificateReset struct {
+	DatabaseCertificate
+	RestartNotice
+}
+
+// DatabasePasswordReset is the new password after a reset, with the
+// applications of stacks connected to the database that must restart to read it.
 type DatabasePasswordReset struct {
 	Password string `json:"password"`
+	RestartNotice
 }
 
 // ---------------------------------------------------------------------------
@@ -358,8 +372,9 @@ type DatabasesCredentialsCertificateService interface {
 	// databases:credentials. Returns JSON, not a binary download.
 	Get(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificate, error)
 	// Reset: POST /v1/databases/:id/credentials/certificate/reset — scope
-	// databases:credentials.
-	Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificate, error)
+	// databases:credentials. The answer says which applications of stacks
+	// connected to the database must restart to read the new certificate.
+	Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificateReset, error)
 }
 
 type databasesCredentialsCertificateServiceImpl struct{ rest rest.Client }
@@ -372,12 +387,12 @@ func (cert *databasesCredentialsCertificateServiceImpl) Get(ctx context.Context,
 	return rest.DecodeJSON[DatabaseCertificate](data)
 }
 
-func (cert *databasesCredentialsCertificateServiceImpl) Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificate, error) {
+func (cert *databasesCredentialsCertificateServiceImpl) Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificateReset, error) {
 	data, err := cert.rest.Do(ctx, http.MethodPost, dbPath(id, "/credentials/certificate/reset"), nil, nil, "", opts...)
 	if err != nil {
-		return DatabaseCertificate{}, err
+		return DatabaseCertificateReset{}, err
 	}
-	return rest.DecodeJSON[DatabaseCertificate](data)
+	return rest.DecodeJSON[DatabaseCertificateReset](data)
 }
 
 // DatabasesCredentialsPasswordService groups the

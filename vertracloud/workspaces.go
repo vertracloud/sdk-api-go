@@ -13,8 +13,8 @@ import (
 )
 
 // WorkspacesService groups every /v1/workspaces* route exposed to the public
-// client (30 routes: workspaces, members, roles, invites, action requests,
-// apps, databases, folders, favorites).
+// client (34 routes: workspaces, members, roles, invites, action requests,
+// apps, databases, templates, stacks, folders, favorites).
 //
 // Unlike AppsService/DatabasesService, Workspaces routes have no use for
 // rest.WithWorkspaceID: the workspace is already identified by the :id path
@@ -39,6 +39,8 @@ type WorkspacesService interface {
 	ActionRequests() WorkspacesActionRequestsService
 	Apps() WorkspacesAppsService
 	Databases() WorkspacesDatabasesService
+	Templates() WorkspacesTemplatesService
+	Stacks() WorkspacesStacksService
 	Folders() WorkspacesFoldersService
 	Favorites() WorkspacesFavoritesService
 }
@@ -128,6 +130,14 @@ func (s *workspacesServiceImpl) Databases() WorkspacesDatabasesService {
 	return &workspacesDatabasesServiceImpl{rest: s.rest}
 }
 
+func (s *workspacesServiceImpl) Templates() WorkspacesTemplatesService {
+	return &workspacesTemplatesServiceImpl{rest: s.rest}
+}
+
+func (s *workspacesServiceImpl) Stacks() WorkspacesStacksService {
+	return &workspacesStacksServiceImpl{rest: s.rest}
+}
+
 func (s *workspacesServiceImpl) Folders() WorkspacesFoldersService {
 	return &workspacesFoldersServiceImpl{rest: s.rest}
 }
@@ -188,6 +198,8 @@ type WorkspaceResourceType string
 const (
 	WorkspaceResourceTypeApplication WorkspaceResourceType = "application"
 	WorkspaceResourceTypeDatabase    WorkspaceResourceType = "database"
+	WorkspaceResourceTypeImage       WorkspaceResourceType = "image"
+	WorkspaceResourceTypeStack       WorkspaceResourceType = "stack"
 )
 
 // WorkspaceFolderColor is a wire enum.
@@ -233,14 +245,25 @@ type WorkspaceFolderItem struct {
 	Position int `json:"position"`
 }
 
+// WorkspaceFolderFlowLayout is where a folder sits on the Flow canvas.
+type WorkspaceFolderFlowLayout struct {
+	X         float64 `json:"x"`
+	Y         float64 `json:"y"`
+	Collapsed bool    `json:"collapsed,omitempty"`
+}
+
 type WorkspaceResourceFolder struct {
-	ID        string                `json:"id"`
-	Name      string                `json:"name"`
-	Color     WorkspaceFolderColor  `json:"color"`
-	Position  int                   `json:"position"`
-	Resources []WorkspaceFolderItem `json:"resources"`
-	CreatedAt time.Time             `json:"created_at"`
-	UpdatedAt time.Time             `json:"updated_at"`
+	ID       string               `json:"id"`
+	Name     string               `json:"name"`
+	Color    WorkspaceFolderColor `json:"color"`
+	Position int                  `json:"position"`
+	// Notes are the free-text notes of the folder; nil when it has none.
+	Notes *string `json:"notes,omitempty"`
+	// FlowLayout is the position of the folder on the Flow canvas; nil until it is placed.
+	FlowLayout *WorkspaceFolderFlowLayout `json:"flow_layout,omitempty"`
+	Resources  []WorkspaceFolderItem      `json:"resources"`
+	CreatedAt  time.Time                  `json:"created_at"`
+	UpdatedAt  time.Time                  `json:"updated_at"`
 }
 
 type WorkspaceFavorite struct {
@@ -758,6 +781,56 @@ func (d *workspacesDatabasesServiceImpl) Add(ctx context.Context, workspaceID, d
 func (d *workspacesDatabasesServiceImpl) Remove(ctx context.Context, workspaceID, dbID string, opts ...rest.RequestOpt) error {
 	path := workspacePath(workspaceID, "/databases/"+url.PathEscape(dbID))
 	_, err := d.rest.Do(ctx, http.MethodDelete, path, nil, nil, "", opts...)
+	return err
+}
+
+// WorkspacesTemplatesService groups the /v1/workspaces/:id/templates/:template_id
+// routes: moving a private template to a workspace and back.
+type WorkspacesTemplatesService interface {
+	// Add: POST /v1/workspaces/:id/templates/:template_id — scope
+	// workspaces:write. Only the owner of the workspace and of the template.
+	// Repeating it is not an error; a template already in another workspace
+	// fails with 409.
+	Add(ctx context.Context, workspaceID, templateID string, opts ...rest.RequestOpt) error
+	// Remove: DELETE /v1/workspaces/:id/templates/:template_id — scope
+	// workspaces:write.
+	Remove(ctx context.Context, workspaceID, templateID string, opts ...rest.RequestOpt) error
+}
+
+type workspacesTemplatesServiceImpl struct{ rest rest.Client }
+
+func (t *workspacesTemplatesServiceImpl) Add(ctx context.Context, workspaceID, templateID string, opts ...rest.RequestOpt) error {
+	path := workspacePath(workspaceID, "/templates/"+url.PathEscape(templateID))
+	_, err := t.rest.Do(ctx, http.MethodPost, path, nil, nil, "", opts...)
+	return err
+}
+
+func (t *workspacesTemplatesServiceImpl) Remove(ctx context.Context, workspaceID, templateID string, opts ...rest.RequestOpt) error {
+	path := workspacePath(workspaceID, "/templates/"+url.PathEscape(templateID))
+	_, err := t.rest.Do(ctx, http.MethodDelete, path, nil, nil, "", opts...)
+	return err
+}
+
+// WorkspacesStacksService groups the /v1/workspaces/:id/stacks/:stack_id
+// routes: moving a stack to a workspace and back.
+type WorkspacesStacksService interface {
+	// Add: POST /v1/workspaces/:id/stacks/:stack_id — scope workspaces:write.
+	Add(ctx context.Context, workspaceID, stackID string, opts ...rest.RequestOpt) error
+	// Remove: DELETE /v1/workspaces/:id/stacks/:stack_id — scope workspaces:write.
+	Remove(ctx context.Context, workspaceID, stackID string, opts ...rest.RequestOpt) error
+}
+
+type workspacesStacksServiceImpl struct{ rest rest.Client }
+
+func (t *workspacesStacksServiceImpl) Add(ctx context.Context, workspaceID, stackID string, opts ...rest.RequestOpt) error {
+	path := workspacePath(workspaceID, "/stacks/"+url.PathEscape(stackID))
+	_, err := t.rest.Do(ctx, http.MethodPost, path, nil, nil, "", opts...)
+	return err
+}
+
+func (t *workspacesStacksServiceImpl) Remove(ctx context.Context, workspaceID, stackID string, opts ...rest.RequestOpt) error {
+	path := workspacePath(workspaceID, "/stacks/"+url.PathEscape(stackID))
+	_, err := t.rest.Do(ctx, http.MethodDelete, path, nil, nil, "", opts...)
 	return err
 }
 
