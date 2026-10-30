@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3](https://github.com/vertracloud/sdk-api-go/compare/v0.3.2...v0.3.3) (2026-10-30)
+
+
+### Features
+
+* add locked_deploy_settings to applications ([2f7e45d](https://github.com/vertracloud/sdk-api-go/commit/2f7e45d762dc45a3a9513ec1a2c7ede5660205b3))
+* add templates and stacks resources ([327706f](https://github.com/vertracloud/sdk-api-go/commit/327706fb20d1d09d068ebf1a7d628365b84bf115))
+
 ## [0.3.2](https://github.com/vertracloud/sdk-api-go/compare/v0.3.1...v0.3.2) (2026-10-25)
 
 
