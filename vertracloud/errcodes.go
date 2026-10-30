@@ -25,6 +25,7 @@ const (
 	ErrCodeTemplateRAMInsufficient        = "TEMPLATE_RAM_INSUFFICIENT"
 	ErrCodeTemplateImageSlotsExhausted    = "TEMPLATE_IMAGE_SLOTS_EXHAUSTED"
 	ErrCodeTemplateClosed                 = "TEMPLATE_CLOSED"
+	ErrCodeTemplateSettingLocked          = "TEMPLATE_SETTING_LOCKED" // details.setting: "zero_downtime" or "auto_rollback"
 	ErrCodeTemplatePrivateLimitReached    = "TEMPLATE_PRIVATE_LIMIT_REACHED"
 	ErrCodeTemplateDeployInProgress       = "TEMPLATE_DEPLOY_IN_PROGRESS"
 	ErrCodeTemplateDeployFailed           = "TEMPLATE_DEPLOY_FAILED" // the deploy was undone; details.step is the step that failed

@@ -634,3 +634,14 @@ func TestErrorHelpers(t *testing.T) {
 		t.Error("expected ok with unreadable details")
 	}
 }
+
+func TestTemplates_ApplicationTemplateLockedDeploySettings(t *testing.T) {
+	var got ApplicationTemplate
+	raw := `{"template_id":"t","service_id":null,"permissions":{},"locked_deploy_settings":["zero_downtime"]}`
+	if err := json.Unmarshal([]byte(raw), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.LockedDeploySettings) != 1 || got.LockedDeploySettings[0] != "zero_downtime" {
+		t.Fatalf("locked_deploy_settings = %v", got.LockedDeploySettings)
+	}
+}

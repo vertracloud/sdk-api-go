@@ -486,6 +486,9 @@ type ApplicationTemplate struct {
 	ServiceID *string `json:"service_id"`
 	// Permissions is what the template lets you do with this application.
 	Permissions TemplateEffectivePermissions `json:"permissions"`
+	// LockedDeploySettings are the deploy settings the template locks for this application ("zero_downtime",
+	// "auto_rollback"): UpdateConfig refuses another value with TEMPLATE_SETTING_LOCKED. Empty once detached.
+	LockedDeploySettings []string `json:"locked_deploy_settings,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -903,7 +906,7 @@ type TemplateDeployBody struct {
 	Inputs map[string]TemplateInputValue `json:"inputs,omitempty"`
 	// Services are the choices per service, by service id.
 	Services map[string]TemplateDeployServiceOptions `json:"services,omitempty"`
-	// NetworkMode: only "public" is available for now.
+	// NetworkMode: only "public" is accepted.
 	NetworkMode StackNetworkMode `json:"network_mode,omitempty"`
 	// WorkspaceID is the workspace that will own what is created.
 	WorkspaceID string `json:"workspace_id,omitempty"`

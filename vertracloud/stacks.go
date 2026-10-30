@@ -54,7 +54,7 @@ type StacksService interface {
 	// Code to connect an application of the stack to what it is linked to.
 	Connection(ctx context.Context, id string, params StackConnectionParams, opts ...rest.RequestOpt) (StackConnectionInfo, error)
 	// SetNetworkMode: POST /v1/stacks/:stack_id/network-mode — scope
-	// stacks:write. Only "public" is accepted for now; "private" fails with
+	// stacks:write. Only "public" is accepted; "private" fails with
 	// STACK_NETWORK_MODE_UNAVAILABLE.
 	SetNetworkMode(ctx context.Context, id string, mode StackNetworkMode, opts ...rest.RequestOpt) (Stack, error)
 	// AddDatabase: POST /v1/stacks/:stack_id/databases — scope stacks:write.
@@ -121,7 +121,7 @@ type StackSnapshotsService interface {
 
 // StackNetworkMode is how the members of a stack reach each other. "public"
 // uses the public addresses of the services (databases with client
-// certificates); "private" is reserved and not available yet.
+// certificates). Only "public" is accepted.
 type StackNetworkMode string
 
 const (
@@ -177,8 +177,8 @@ const (
 // StackBindingValue is what a managed variable of a connection receives. For
 // a database: url, host, port, user, password, database, the paths of the
 // client certificates (ssl.ca_path, ssl.cert_path, ssl.key_path, ssl.pem_path,
-// ssl.p12_path) and prisma_url (never added by default). For another app:
-// url. For a Blob folder: endpoint, bucket, region, prefix, access_key_id,
+// ssl.p12_path) and prisma_url (never added by default). For another app (or
+// the app itself): url and domain (host name only). For a Blob folder: endpoint, bucket, region, prefix, access_key_id,
 // secret_access_key and public_base_url.
 type StackBindingValue string
 
@@ -202,6 +202,7 @@ const (
 	StackBindingValueAccessKeyID     StackBindingValue = "access_key_id"
 	StackBindingValueSecretAccessKey StackBindingValue = "secret_access_key"
 	StackBindingValuePublicBaseURL   StackBindingValue = "public_base_url"
+	StackBindingValueDomain          StackBindingValue = "domain"
 )
 
 // StackSnapshotReason is why a stack snapshot was taken.
@@ -424,7 +425,7 @@ type StackConnectionInput struct {
 type StackCreateBody struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	// NetworkMode: only "public" is available for now. Default "public".
+	// NetworkMode: only "public" is accepted. Default "public".
 	NetworkMode StackNetworkMode `json:"network_mode,omitempty"`
 	Members     []StackMemberRef `json:"members,omitempty"`
 	// Bindings are the connections between the members.
