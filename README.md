@@ -172,7 +172,27 @@ err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes 
 
 ### Plans
 
-`UserPlanName` holds a plan name (`UserPlanNamePro`, `UserPlanNameEnterprise12`, ...). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *UserPlanName` (nil = no plan).
+`UserPlanName` holds a plan name. The current grid has 22 names (`UserPlanNameStarter1`, `UserPlanNameStarter2`, `UserPlanNamePro4` to `UserPlanNamePro8`, `UserPlanNameBusiness12` to `UserPlanNameBusiness24`, `UserPlanNameEnterprise32` to `UserPlanNameEnterprise512`). The names of the previous grid (`UserPlanNameEconomy`, `UserPlanNamePro`, `UserPlanNameScale`, `UserPlanNameIntermediary`, `UserPlanNameEnterprise4` to `UserPlanNameEnterprise30`) are still accepted while there are subscribers on them; they are no longer sold. `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *UserPlanName` (nil = no plan).
+
+`Plans.List` is public (`GET /v1/plans`): it returns the plans for sale with price, memory, vCPU, limits and features, and the billing periods (1, 3, 6 or 12 months) with their discounts. It works without an API key:
+
+```go
+catalog, err := vertracloud.New(rest.NewPublicClient()).Plans.List(ctx)
+for _, plan := range catalog.Plans {
+	fmt.Println(plan.Name, plan.Price, plan.MemoryMB)
+}
+```
+
+`Billing.Orders().Quote` (scope `billing:read`) prices a plan and period, with an optional coupon, without creating an order. `Total` is in BRL and is what `Orders().Create` charges:
+
+```go
+quote, err := client.Billing.Orders().Quote(ctx, vertracloud.OrderQuoteBody{
+	Plan:   vertracloud.UserPlanNameStarter2,
+	Months: 6,
+	Coupon: "MYCODE", // optional
+})
+fmt.Println(quote.Total, quote.PeriodDiscountPercent, quote.LegacyPrice)
+```
 
 Public payloads, enums, and input types use the `Application` prefix. Input
 types end in `Params` for query/options/multipart values and `Body` for JSON
@@ -435,8 +455,9 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 | Snapshots | `client.Snapshots` | 5 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
 | Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Templates()`, `.Stacks()`, `.Folders()`, `.Favorites()`) | 34 |
-| Billing | `client.Billing` (+ `.Orders()`) | 7 |
+| Billing | `client.Billing` (+ `.Orders()`, with `Quote`) | 8 |
 | Public status | `client.Status` | 1 |
+| Public plan catalog | `client.Plans` | 1 |
 
 Dashboard-only features (activity log, notifications, API key management, the database **Data** tab, plan downgrade, creating workspace invites, paying by card, saved cards, automatic renewal, order receipts and approving action requests) are not part of the public API. See [what an API key cannot do](https://docs.vertracloud.app/sdks).
 

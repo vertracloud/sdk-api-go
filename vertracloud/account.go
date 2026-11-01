@@ -116,8 +116,43 @@ type AccountPlanMemory struct {
 }
 
 // UserPlanName is the name of a plan. An account without a plan has none.
+//
+// The current grid is Starter, Pro, Business and Enterprise (PlanFamily). The
+// names of the previous grid (Economy, Pro, Scale, Intermediary and
+// Enterprise 4 to 30) are still accepted while there are subscribers on them;
+// they are no longer sold.
 type UserPlanName string
 
+// Current grid.
+const (
+	UserPlanNameStarter1 UserPlanName = "starter-1"
+	UserPlanNameStarter2 UserPlanName = "starter-2"
+
+	UserPlanNamePro4 UserPlanName = "pro-4"
+	UserPlanNamePro6 UserPlanName = "pro-6"
+	UserPlanNamePro8 UserPlanName = "pro-8"
+
+	UserPlanNameBusiness12 UserPlanName = "business-12"
+	UserPlanNameBusiness16 UserPlanName = "business-16"
+	UserPlanNameBusiness24 UserPlanName = "business-24"
+
+	UserPlanNameEnterprise32  UserPlanName = "enterprise-32"
+	UserPlanNameEnterprise48  UserPlanName = "enterprise-48"
+	UserPlanNameEnterprise64  UserPlanName = "enterprise-64"
+	UserPlanNameEnterprise96  UserPlanName = "enterprise-96"
+	UserPlanNameEnterprise128 UserPlanName = "enterprise-128"
+	UserPlanNameEnterprise160 UserPlanName = "enterprise-160"
+	UserPlanNameEnterprise192 UserPlanName = "enterprise-192"
+	UserPlanNameEnterprise224 UserPlanName = "enterprise-224"
+	UserPlanNameEnterprise256 UserPlanName = "enterprise-256"
+	UserPlanNameEnterprise288 UserPlanName = "enterprise-288"
+	UserPlanNameEnterprise320 UserPlanName = "enterprise-320"
+	UserPlanNameEnterprise384 UserPlanName = "enterprise-384"
+	UserPlanNameEnterprise448 UserPlanName = "enterprise-448"
+	UserPlanNameEnterprise512 UserPlanName = "enterprise-512"
+)
+
+// Previous grid: accepted while there are subscribers, no longer sold.
 const (
 	UserPlanNameEconomy      UserPlanName = "economy"
 	UserPlanNamePro          UserPlanName = "pro"
@@ -137,7 +172,6 @@ const (
 	UserPlanNameEnterprise26 UserPlanName = "enterprise-26"
 	UserPlanNameEnterprise28 UserPlanName = "enterprise-28"
 	UserPlanNameEnterprise30 UserPlanName = "enterprise-30"
-	UserPlanNameEnterprise32 UserPlanName = "enterprise-32"
 )
 
 type AccountPlan struct {

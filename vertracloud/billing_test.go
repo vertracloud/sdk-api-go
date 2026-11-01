@@ -280,3 +280,40 @@ func TestBilling_Orders_Status_NotFound(t *testing.T) {
 		t.Errorf("IsNotFoundError() = false, want true (status %d)", apiErr.Status)
 	}
 }
+
+// TestBilling_Orders_Quote checks the route, the JSON body (coupon omitted
+// when empty) and the decoded OrderQuote.
+func TestBilling_Orders_Quote(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"plan":"starter-1","months":6,"list_price":119.4,"period_discount_percent":15,"coupon":{"code":"V3-X","discount":5},"total":96.49,"legacy_price":true,"legacy_price_until":"2026-12-01T00:00:00.000Z","payment_methods":["pix","card"]}`)
+	fake.EnqueueJSON(200, `{"plan":"pro-4","months":1,"list_price":50,"period_discount_percent":0,"coupon":null,"total":50,"legacy_price":false,"legacy_price_until":null,"payment_methods":["pix"]}`)
+	svc := newBillingService(fake)
+
+	q, err := svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: UserPlanNameStarter1, Months: 6, Coupon: "V3-X"})
+	if err != nil {
+		t.Fatalf("Quote: %v", err)
+	}
+	if r := fake.Requests[0]; r.Method != http.MethodPost || r.Path != "/v1/orders/quote" || r.ContentType != "application/json" {
+		t.Errorf("request: %#v", r)
+	}
+	if got, want := string(fake.Requests[0].Body), `{"plan":"starter-1","months":6,"coupon":"V3-X"}`; got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+	if q.Plan != UserPlanNameStarter1 || q.Months != 6 || q.ListPrice != 119.4 || q.PeriodDiscountPercent != 15 || q.Total != 96.49 || !q.LegacyPrice {
+		t.Errorf("quote: %#v", q)
+	}
+	if q.Coupon == nil || q.Coupon.Code != "V3-X" || q.Coupon.Discount != 5 || q.LegacyPriceUntil == nil || q.LegacyPriceUntil.Year() != 2026 {
+		t.Errorf("coupon/until: %#v", q)
+	}
+
+	q, err = svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: UserPlanNamePro4, Months: 1})
+	if err != nil {
+		t.Fatalf("Quote: %v", err)
+	}
+	if got, want := string(fake.Requests[1].Body), `{"plan":"pro-4","months":1}`; got != want {
+		t.Errorf("body = %s, want %s", got, want)
+	}
+	if q.Coupon != nil || q.LegacyPriceUntil != nil || q.LegacyPrice {
+		t.Errorf("null fields: %#v", q)
+	}
+}

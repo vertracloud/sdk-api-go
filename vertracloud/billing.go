@@ -253,14 +253,50 @@ type BillingDetails struct {
 // ---------------------------------------------------------------------------
 
 // OrderCreateBody is the body of POST
-// /v1/orders. Plan and Months are required for every order type. Months is 1, 3 or 12
-// (the Economy plan only accepts 1).
+// /v1/orders. Plan and Months are required for every order type. Months is 1, 3, 6 or 12;
+// plans of the previous grid follow the periods they were sold with.
 type OrderCreateBody struct {
 	Plan   string    `json:"plan"`
 	Months int       `json:"months"`
 	Coupon string    `json:"coupon,omitempty"`
 	Type   OrderType `json:"type,omitempty"`
 	Source string    `json:"source,omitempty"`
+}
+
+// OrderQuoteBody is the body of POST /v1/orders/quote. Months is 1, 3, 6 or
+// 12.
+type OrderQuoteBody struct {
+	Plan   UserPlanName `json:"plan"`
+	Months int          `json:"months"`
+	Coupon string       `json:"coupon,omitempty"`
+}
+
+// OrderQuoteCoupon is the coupon applied to an OrderQuote. Discount is in BRL.
+type OrderQuoteCoupon struct {
+	Code     string  `json:"code"`
+	Discount float64 `json:"discount"`
+}
+
+// OrderQuote is the response of POST /v1/orders/quote: the price of a plan
+// for a period, with the period discount and an optional coupon applied.
+// Amounts are in BRL.
+type OrderQuote struct {
+	Plan   UserPlanName `json:"plan"`
+	Months int          `json:"months"`
+	// ListPrice is the monthly list price times the months, before any
+	// discount.
+	ListPrice             float64 `json:"list_price"`
+	PeriodDiscountPercent float64 `json:"period_discount_percent"`
+	// Coupon is nil when no coupon was sent.
+	Coupon *OrderQuoteCoupon `json:"coupon"`
+	// Total is the final price.
+	Total float64 `json:"total"`
+	// LegacyPrice is true when the quote uses the price the account had
+	// before the current grid.
+	LegacyPrice bool `json:"legacy_price"`
+	// LegacyPriceUntil is nil when LegacyPrice is false.
+	LegacyPriceUntil *time.Time      `json:"legacy_price_until"`
+	PaymentMethods   []OrderProvider `json:"payment_methods"`
 }
 
 // BillingTaxIDBody is the tax document sent to PUT /v1/users/me/billing.
@@ -300,6 +336,10 @@ type BillingOrdersService interface {
 	Status(ctx context.Context, orderID string, opts ...rest.RequestOpt) (OrderStatusInfo, error)
 	// Create: POST /v1/orders — scope billing:write.
 	Create(ctx context.Context, body OrderCreateBody, opts ...rest.RequestOpt) (OrderCreateResponse, error)
+	// Quote: POST /v1/orders/quote — scope billing:read. Prices a
+	// plan and period without creating an order or using the coupon; Total is
+	// what Create would charge.
+	Quote(ctx context.Context, body OrderQuoteBody, opts ...rest.RequestOpt) (OrderQuote, error)
 	// InitiatePix: POST /v1/orders/:orderId/initiate/pix — scope
 	// billing:write. Generates (or re-fetches) the order's PIX QR code.
 	InitiatePix(ctx context.Context, orderID string, opts ...rest.RequestOpt) (PixPaymentResponse, error)
@@ -343,6 +383,18 @@ func (o *billingOrdersServiceImpl) Create(ctx context.Context, body OrderCreateB
 		return OrderCreateResponse{}, err
 	}
 	return rest.DecodeJSON[OrderCreateResponse](data)
+}
+
+func (o *billingOrdersServiceImpl) Quote(ctx context.Context, body OrderQuoteBody, opts ...rest.RequestOpt) (OrderQuote, error) {
+	r, err := billingJSONBody(body)
+	if err != nil {
+		return OrderQuote{}, err
+	}
+	data, err := o.rest.Do(ctx, http.MethodPost, "/v1/orders/quote", nil, r, "application/json", opts...)
+	if err != nil {
+		return OrderQuote{}, err
+	}
+	return rest.DecodeJSON[OrderQuote](data)
 }
 
 func (o *billingOrdersServiceImpl) InitiatePix(ctx context.Context, orderID string, opts ...rest.RequestOpt) (PixPaymentResponse, error) {

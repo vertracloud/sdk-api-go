@@ -32,7 +32,9 @@ type Client struct {
 	Account    AccountService
 	Workspaces WorkspacesService
 	Billing    BillingService
-	Status     StatusService
+	// Plans is public: it also works with rest.NewPublicClient.
+	Plans  PlansService
+	Status StatusService
 	// Blob is the Blob Storage client. It talks to its own host
 	// (DefaultBlobBaseURL); see WithBlobBaseURL.
 	Blob *BlobClient
@@ -84,6 +86,7 @@ func New(restClient rest.Client, opts ...Option) *Client {
 		Account:    newAccountService(restClient),
 		Workspaces: newWorkspacesService(restClient),
 		Billing:    newBillingService(restClient),
+		Plans:      newPlansService(restClient),
 		Status:     newStatusService(restClient),
 		Blob:       newBlobClient(restClient, o),
 	}
