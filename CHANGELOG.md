@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.0](https://github.com/vertracloud/sdk-api-go/compare/v0.3.3...v0.4.0) (2026-11-01)
+
+
+### ⚠ BREAKING CHANGES
+
+* drop PlanGrid and the grid field of the plans catalog
+* replace UserPlanName with PlanName and drop cluster 3
+
+### Features
+
+* drop PlanGrid and the grid field of the plans catalog ([e0e5236](https://github.com/vertracloud/sdk-api-go/commit/e0e5236306c38677f4481361688f1bc1af79bcdd))
+* replace UserPlanName with PlanName and drop cluster 3 ([f819bad](https://github.com/vertracloud/sdk-api-go/commit/f819badfd71cca48706a882923264d9fb2e91b22))
+* support the new plans, plans listing and order quote ([0eb9967](https://github.com/vertracloud/sdk-api-go/commit/0eb99676ab02587ef6e1ae0831e733480f5a4df0))
+
 ## [0.3.3](https://github.com/vertracloud/sdk-api-go/compare/v0.3.2...v0.3.3) (2026-10-30)
 
 
