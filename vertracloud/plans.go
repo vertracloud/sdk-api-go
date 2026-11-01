@@ -7,7 +7,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// PlanFamily is the family of a plan of the current grid.
+// PlanFamily is the family of a plan.
 type PlanFamily string
 
 const (
@@ -15,14 +15,6 @@ const (
 	PlanFamilyPro        PlanFamily = "pro"
 	PlanFamilyBusiness   PlanFamily = "business"
 	PlanFamilyEnterprise PlanFamily = "enterprise"
-)
-
-// PlanGrid is the grid name reported by the catalog.
-type PlanGrid string
-
-const (
-	PlanGridLegacy PlanGrid = "legacy"
-	PlanGridV3     PlanGrid = "v3"
 )
 
 // PlanCycle is a billing period and its discount over the monthly price.
@@ -98,7 +90,6 @@ type CatalogPlan struct {
 // PlansCatalog is the plans currently for sale and the billing periods with
 // their discounts.
 type PlansCatalog struct {
-	Grid   PlanGrid      `json:"grid"`
 	Cycles []PlanCycle   `json:"cycles"`
 	Plans  []CatalogPlan `json:"plans"`
 }

@@ -117,7 +117,7 @@ type AccountPlanMemory struct {
 
 // PlanName is the name of a plan. An account without a plan has none.
 //
-// The grid is Starter, Pro, Business and Enterprise (PlanFamily).
+// The families are Starter, Pro, Business and Enterprise (PlanFamily).
 type PlanName string
 
 const (

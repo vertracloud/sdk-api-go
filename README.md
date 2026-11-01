@@ -172,7 +172,7 @@ err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes 
 
 ### Plans
 
-`PlanName` holds a plan name. The grid has 22 names (`PlanNameStarter1`, `PlanNameStarter2`, `PlanNamePro4` to `PlanNamePro8`, `PlanNameBusiness12` to `PlanNameBusiness24`, `PlanNameEnterprise32` to `PlanNameEnterprise512`). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *PlanName` (nil = no plan).
+`PlanName` holds a plan name. There are 22 names (`PlanNameStarter1`, `PlanNameStarter2`, `PlanNamePro4` to `PlanNamePro8`, `PlanNameBusiness12` to `PlanNameBusiness24`, `PlanNameEnterprise32` to `PlanNameEnterprise512`). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *PlanName` (nil = no plan).
 
 `Plans.List` is public (`GET /v1/plans`): it returns the plans for sale with price, memory, vCPU, limits and features, and the billing periods (1, 3, 6 or 12 months) with their discounts. It works without an API key:
 

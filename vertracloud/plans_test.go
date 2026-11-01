@@ -10,7 +10,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-const plansCatalogJSON = `{"grid":"v3","cycles":[{"months":1,"discount_percent":0},{"months":6,"discount_percent":15}],"plans":[` +
+const plansCatalogJSON = `{"cycles":[{"months":1,"discount_percent":0},{"months":6,"discount_percent":15}],"plans":[` +
 	`{"name":"starter-1","family":"starter","legacy":false,"memory_mb":1024,"max_vcpus_per_app":1,"price":19.9,"payment_methods":["pix","card"],` +
 	`"limits":{"deploys_per_hour":20,"requests_per_minute":120,"requests_per_day":43200,"max_domains":0,"max_domain_ports":0,"manual_backups_per_day":8,"workspace_members":1,"workspace_roles":0,"release_versions":3,"release_retention_days":7,"max_custom_images":0,` +
 	`"blob":{"quota_bytes":10737418240,"max_rules":5,"max_custom_domains":0,"image_transformations_per_month":1000,"s3_requests_per_10s":100}},` +
@@ -27,7 +27,7 @@ func TestPlans_List_DecodesCatalog(t *testing.T) {
 	if len(fake.Requests) != 1 || fake.Requests[0].Method != http.MethodGet || fake.Requests[0].Path != "/v1/plans" {
 		t.Fatalf("requests: %#v", fake.Requests)
 	}
-	if got.Grid != PlanGridV3 || len(got.Cycles) != 2 || got.Cycles[1].Months != 6 || got.Cycles[1].DiscountPercent != 15 {
+	if len(got.Cycles) != 2 || got.Cycles[1].Months != 6 || got.Cycles[1].DiscountPercent != 15 {
 		t.Fatalf("catalog: %#v", got)
 	}
 	p := got.Plans[0]
