@@ -794,8 +794,8 @@ type Template struct {
 	RAMMinTotal int  `json:"ram_min_total"`
 	BYOK        bool `json:"byok"`
 	// RequiredPlan is the lowest plan that can use the template.
-	RequiredPlan UserPlanName `json:"required_plan"`
-	CodeView     bool         `json:"code_view"`
+	RequiredPlan PlanName `json:"required_plan"`
+	CodeView     bool     `json:"code_view"`
 	// UsesCount is the number of uses; nil when it is not shown.
 	UsesCount *int            `json:"uses_count"`
 	Owner     *TemplateOwner  `json:"owner"`
@@ -875,7 +875,7 @@ type TemplateValidation struct {
 	Valid  bool                      `json:"valid"`
 	Issues []TemplateValidationIssue `json:"issues"`
 	// RequiredPlan is nil when the manifest is not valid.
-	RequiredPlan *UserPlanName `json:"required_plan"`
+	RequiredPlan *PlanName `json:"required_plan"`
 	// RAMMinTotal is nil when the manifest is not valid.
 	RAMMinTotal *int                     `json:"ram_min_total"`
 	Services    []TemplateServiceSummary `json:"services"`
@@ -1273,7 +1273,7 @@ type TemplateSharePreview struct {
 	Services      []TemplateServiceSummary `json:"services"`
 	CreatesStack  bool                     `json:"creates_stack"`
 	RAMMinTotal   int                      `json:"ram_min_total"`
-	RequiredPlan  UserPlanName             `json:"required_plan"`
+	RequiredPlan  PlanName                 `json:"required_plan"`
 	// ImageSlotsNeeded is the number of image slots using the link takes.
 	ImageSlotsNeeded int `json:"image_slots_needed"`
 	// Verified is always false: a template shared by link is not reviewed by the platform.

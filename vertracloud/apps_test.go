@@ -524,14 +524,14 @@ func TestApps_DeploysWebhookCreate_BranchIsOptionalInBody(t *testing.T) {
 
 func TestApps_OwnerPlanIsNullablePlanName(t *testing.T) {
 	typ := reflect.TypeOf(Application{}.OwnerPlan)
-	if typ.Kind() != reflect.Ptr || typ.Elem().Name() != "UserPlanName" {
-		t.Fatalf("application owner_plan type = %s, want *UserPlanName", typ)
+	if typ.Kind() != reflect.Ptr || typ.Elem().Name() != "PlanName" {
+		t.Fatalf("application owner_plan type = %s, want *PlanName", typ)
 	}
 	var app Application
-	if err := json.Unmarshal([]byte(`{"owner_plan":"enterprise-12"}`), &app); err != nil {
+	if err := json.Unmarshal([]byte(`{"owner_plan":"business-12"}`), &app); err != nil {
 		t.Fatal(err)
 	}
-	if app.OwnerPlan == nil || *app.OwnerPlan != UserPlanNameEnterprise12 {
+	if app.OwnerPlan == nil || *app.OwnerPlan != PlanNameBusiness12 {
 		t.Fatalf("owner_plan = %v", app.OwnerPlan)
 	}
 	if err := json.Unmarshal([]byte(`{"owner_plan":null}`), &app); err != nil || app.OwnerPlan != nil {

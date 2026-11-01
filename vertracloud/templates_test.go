@@ -43,7 +43,7 @@ func TestTemplates_RouteMatrix(t *testing.T) {
 			return err
 		}},
 		{"Validate", http.MethodPost, "/v1/templates/validate", func(f *vertratest.FakeRestClient) {
-			f.EnqueueJSON(200, `{"valid":true,"issues":[],"required_plan":"pro","ram_min_total":512,"services":[]}`)
+			f.EnqueueJSON(200, `{"valid":true,"issues":[],"required_plan":"pro-4","ram_min_total":512,"services":[]}`)
 		}, func(ctx context.Context, s TemplatesService) error {
 			_, err := s.Validate(ctx, manifest, opts...)
 			return err
@@ -181,7 +181,7 @@ func TestTemplates_RouteMatrix(t *testing.T) {
 
 func TestTemplates_ListQuery(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"data":[{"id":"tpl_1","slug":"n8n","origin":"vertra","visibility":"public","name":{"pt-br":"n8n"},"category":"automation","required_plan":"pro","ram_min_total":512,"current_version":{"id":"v1","version":"1.2.0","security":false,"created_at":"2026-10-27T10:00:00Z"},"services":[{"id":"app","kind":"app","source_type":"image","database":null,"blob_visibility":null,"ram":{"min":256,"recommended":512},"web":"required","conditional":false}],"uses_count":null,"owner":null,"github":null,"account":{"fits":false,"reasons":[{"reason":"ram","required":512,"available":128}],"required_ram":512,"free_ram":128,"needs_image_slot":true,"image_slots_free":0,"in_use":false,"in_use_count":0}}],"total_count":1,"page":2,"limit":10,"total_pages":2,"has_next_page":false,"has_previous_page":true}`)
+	fake.EnqueueJSON(200, `{"data":[{"id":"tpl_1","slug":"n8n","origin":"vertra","visibility":"public","name":{"pt-br":"n8n"},"category":"automation","required_plan":"pro-4","ram_min_total":512,"current_version":{"id":"v1","version":"1.2.0","security":false,"created_at":"2026-10-27T10:00:00Z"},"services":[{"id":"app","kind":"app","source_type":"image","database":null,"blob_visibility":null,"ram":{"min":256,"recommended":512},"web":"required","conditional":false}],"uses_count":null,"owner":null,"github":null,"account":{"fits":false,"reasons":[{"reason":"ram","required":512,"available":128}],"required_ram":512,"free_ram":128,"needs_image_slot":true,"image_slots_free":0,"in_use":false,"in_use_count":0}}],"total_count":1,"page":2,"limit":10,"total_pages":2,"has_next_page":false,"has_previous_page":true}`)
 	fits := true
 	page, err := newTemplatesService(fake).List(context.Background(), &TemplateListParams{
 		Search: "bot", Category: TemplateCategoryBots, Origin: TemplateOriginPrivate, Tag: "x", Fits: &fits,
@@ -203,7 +203,7 @@ func TestTemplates_ListQuery(t *testing.T) {
 		t.Fatalf("page = %+v", page)
 	}
 	tpl := page.Data[0]
-	if tpl.Slug != "n8n" || tpl.RequiredPlan != "pro" || tpl.UsesCount != nil || tpl.Owner != nil {
+	if tpl.Slug != "n8n" || tpl.RequiredPlan != "pro-4" || tpl.UsesCount != nil || tpl.Owner != nil {
 		t.Errorf("template = %+v", tpl)
 	}
 	if tpl.Account == nil || tpl.Account.Fits || tpl.Account.Reasons[0].Reason != TemplateFitReasonRAM || string(tpl.Account.Reasons[0].Required) != "512" {
@@ -470,7 +470,7 @@ func TestTemplates_ShareLinkCreateAndPreview(t *testing.T) {
 		t.Errorf("link = %+v", link)
 	}
 
-	fake.EnqueueJSON(200, `{"mode":"use","name":{"pt-br":"X"},"description":{"pt-br":"d"},"category":"bots","icon_url":null,"author_display":"ana","version":"1.0.0","services":[],"creates_stack":false,"ram_min_total":256,"required_plan":"pro","image_slots_needed":2,"verified":false,"code_view":true,"byok":false,"inputs":[],"permissions":{"code_view":true,"code_edit":false,"ram_change":true,"ram_below_min":false,"ram_above_max":false,"env_add":true,"commands_edit":false,"terminal":false,"save_as_template":false,"detach":true}}`)
+	fake.EnqueueJSON(200, `{"mode":"use","name":{"pt-br":"X"},"description":{"pt-br":"d"},"category":"bots","icon_url":null,"author_display":"ana","version":"1.0.0","services":[],"creates_stack":false,"ram_min_total":256,"required_plan":"pro-4","image_slots_needed":2,"verified":false,"code_view":true,"byok":false,"inputs":[],"permissions":{"code_view":true,"code_edit":false,"ram_change":true,"ram_below_min":false,"ram_above_max":false,"env_add":true,"commands_edit":false,"terminal":false,"save_as_template":false,"detach":true}}`)
 	pv, err := newTemplatesService(fake).Share().Preview(context.Background(), "a/b")
 	if err != nil {
 		t.Fatal(err)

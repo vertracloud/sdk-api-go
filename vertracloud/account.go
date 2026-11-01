@@ -115,67 +115,41 @@ type AccountPlanMemory struct {
 	Used  int `json:"used"`
 }
 
-// UserPlanName is the name of a plan. An account without a plan has none.
+// PlanName is the name of a plan. An account without a plan has none.
 //
-// The current grid is Starter, Pro, Business and Enterprise (PlanFamily). The
-// names of the previous grid (Economy, Pro, Scale, Intermediary and
-// Enterprise 4 to 30) are still accepted while there are subscribers on them;
-// they are no longer sold.
-type UserPlanName string
+// The grid is Starter, Pro, Business and Enterprise (PlanFamily).
+type PlanName string
 
-// Current grid.
 const (
-	UserPlanNameStarter1 UserPlanName = "starter-1"
-	UserPlanNameStarter2 UserPlanName = "starter-2"
+	PlanNameStarter1 PlanName = "starter-1"
+	PlanNameStarter2 PlanName = "starter-2"
 
-	UserPlanNamePro4 UserPlanName = "pro-4"
-	UserPlanNamePro6 UserPlanName = "pro-6"
-	UserPlanNamePro8 UserPlanName = "pro-8"
+	PlanNamePro4 PlanName = "pro-4"
+	PlanNamePro6 PlanName = "pro-6"
+	PlanNamePro8 PlanName = "pro-8"
 
-	UserPlanNameBusiness12 UserPlanName = "business-12"
-	UserPlanNameBusiness16 UserPlanName = "business-16"
-	UserPlanNameBusiness24 UserPlanName = "business-24"
+	PlanNameBusiness12 PlanName = "business-12"
+	PlanNameBusiness16 PlanName = "business-16"
+	PlanNameBusiness24 PlanName = "business-24"
 
-	UserPlanNameEnterprise32  UserPlanName = "enterprise-32"
-	UserPlanNameEnterprise48  UserPlanName = "enterprise-48"
-	UserPlanNameEnterprise64  UserPlanName = "enterprise-64"
-	UserPlanNameEnterprise96  UserPlanName = "enterprise-96"
-	UserPlanNameEnterprise128 UserPlanName = "enterprise-128"
-	UserPlanNameEnterprise160 UserPlanName = "enterprise-160"
-	UserPlanNameEnterprise192 UserPlanName = "enterprise-192"
-	UserPlanNameEnterprise224 UserPlanName = "enterprise-224"
-	UserPlanNameEnterprise256 UserPlanName = "enterprise-256"
-	UserPlanNameEnterprise288 UserPlanName = "enterprise-288"
-	UserPlanNameEnterprise320 UserPlanName = "enterprise-320"
-	UserPlanNameEnterprise384 UserPlanName = "enterprise-384"
-	UserPlanNameEnterprise448 UserPlanName = "enterprise-448"
-	UserPlanNameEnterprise512 UserPlanName = "enterprise-512"
-)
-
-// Previous grid: accepted while there are subscribers, no longer sold.
-const (
-	UserPlanNameEconomy      UserPlanName = "economy"
-	UserPlanNamePro          UserPlanName = "pro"
-	UserPlanNameScale        UserPlanName = "scale"
-	UserPlanNameIntermediary UserPlanName = "intermediary"
-
-	UserPlanNameEnterprise4  UserPlanName = "enterprise-4"
-	UserPlanNameEnterprise6  UserPlanName = "enterprise-6"
-	UserPlanNameEnterprise8  UserPlanName = "enterprise-8"
-	UserPlanNameEnterprise12 UserPlanName = "enterprise-12"
-	UserPlanNameEnterprise14 UserPlanName = "enterprise-14"
-	UserPlanNameEnterprise16 UserPlanName = "enterprise-16"
-	UserPlanNameEnterprise18 UserPlanName = "enterprise-18"
-	UserPlanNameEnterprise20 UserPlanName = "enterprise-20"
-	UserPlanNameEnterprise22 UserPlanName = "enterprise-22"
-	UserPlanNameEnterprise24 UserPlanName = "enterprise-24"
-	UserPlanNameEnterprise26 UserPlanName = "enterprise-26"
-	UserPlanNameEnterprise28 UserPlanName = "enterprise-28"
-	UserPlanNameEnterprise30 UserPlanName = "enterprise-30"
+	PlanNameEnterprise32  PlanName = "enterprise-32"
+	PlanNameEnterprise48  PlanName = "enterprise-48"
+	PlanNameEnterprise64  PlanName = "enterprise-64"
+	PlanNameEnterprise96  PlanName = "enterprise-96"
+	PlanNameEnterprise128 PlanName = "enterprise-128"
+	PlanNameEnterprise160 PlanName = "enterprise-160"
+	PlanNameEnterprise192 PlanName = "enterprise-192"
+	PlanNameEnterprise224 PlanName = "enterprise-224"
+	PlanNameEnterprise256 PlanName = "enterprise-256"
+	PlanNameEnterprise288 PlanName = "enterprise-288"
+	PlanNameEnterprise320 PlanName = "enterprise-320"
+	PlanNameEnterprise384 PlanName = "enterprise-384"
+	PlanNameEnterprise448 PlanName = "enterprise-448"
+	PlanNameEnterprise512 PlanName = "enterprise-512"
 )
 
 type AccountPlan struct {
-	Name      UserPlanName      `json:"name"`
+	Name      PlanName          `json:"name"`
 	ExpiresAt time.Time         `json:"expires_at"`
 	Duration  int               `json:"duration"`
 	Memory    AccountPlanMemory `json:"memory"`

@@ -84,7 +84,6 @@ type DatabaseCluster int
 const (
 	DatabaseClusterUSA1 DatabaseCluster = 1
 	DatabaseClusterUSA2 DatabaseCluster = 2
-	DatabaseClusterUSA3 DatabaseCluster = 3
 )
 
 // ---------------------------------------------------------------------------
@@ -100,7 +99,7 @@ type Database struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
 	OwnerID     string          `json:"owner_id"`
-	OwnerPlan   *UserPlanName   `json:"owner_plan"`
+	OwnerPlan   *PlanName       `json:"owner_plan"`
 	Status      DatabaseStatus  `json:"status"`
 	RAM         int             `json:"ram"`
 	// Host is e.g. "vertra-cloud-<type>-<dbId>.vertraweb.app".

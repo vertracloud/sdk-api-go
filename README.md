@@ -172,7 +172,7 @@ err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes 
 
 ### Plans
 
-`UserPlanName` holds a plan name. The current grid has 22 names (`UserPlanNameStarter1`, `UserPlanNameStarter2`, `UserPlanNamePro4` to `UserPlanNamePro8`, `UserPlanNameBusiness12` to `UserPlanNameBusiness24`, `UserPlanNameEnterprise32` to `UserPlanNameEnterprise512`). The names of the previous grid (`UserPlanNameEconomy`, `UserPlanNamePro`, `UserPlanNameScale`, `UserPlanNameIntermediary`, `UserPlanNameEnterprise4` to `UserPlanNameEnterprise30`) are still accepted while there are subscribers on them; they are no longer sold. `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *UserPlanName` (nil = no plan).
+`PlanName` holds a plan name. The grid has 22 names (`PlanNameStarter1`, `PlanNameStarter2`, `PlanNamePro4` to `PlanNamePro8`, `PlanNameBusiness12` to `PlanNameBusiness24`, `PlanNameEnterprise32` to `PlanNameEnterprise512`). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *PlanName` (nil = no plan).
 
 `Plans.List` is public (`GET /v1/plans`): it returns the plans for sale with price, memory, vCPU, limits and features, and the billing periods (1, 3, 6 or 12 months) with their discounts. It works without an API key:
 
@@ -187,7 +187,7 @@ for _, plan := range catalog.Plans {
 
 ```go
 quote, err := client.Billing.Orders().Quote(ctx, vertracloud.OrderQuoteBody{
-	Plan:   vertracloud.UserPlanNameStarter2,
+	Plan:   vertracloud.PlanNameStarter2,
 	Months: 6,
 	Coupon: "MYCODE", // optional
 })

@@ -157,8 +157,8 @@ func TestAccount_Update_ReturnsAPIUserShape(t *testing.T) {
 	if got := reflect.TypeOf(APIUser{}.Language).Name(); got != "UserLanguage" {
 		t.Fatalf("APIUser.Language type = %s, want UserLanguage", got)
 	}
-	if got := reflect.TypeOf(AccountPlan{}.Name).Name(); got != "UserPlanName" {
-		t.Fatalf("AccountPlan.Name type = %s, want UserPlanName", got)
+	if got := reflect.TypeOf(AccountPlan{}.Name).Name(); got != "PlanName" {
+		t.Fatalf("AccountPlan.Name type = %s, want PlanName", got)
 	}
 	if _, ok := reflect.TypeOf(APIUser{}).FieldByName("PlanID"); ok {
 		t.Fatal("APIUser must not have PlanID")
@@ -243,7 +243,7 @@ func TestAccount_Get_DecodesFullShape(t *testing.T) {
 		"id":"u1","name":"Ana","email":"a@x.com","language":"pt-br",
 		"workspace_invites_enabled":true,
 		"created_at":"2026-09-22T12:00:00.000Z","updated_at":"2026-09-22T12:00:00.000Z",
-		"plan":{"name":"pro","expires_at":"2026-11-20T12:00:00Z","duration":30,"memory":{"limit":2048,"used":512}},
+		"plan":{"name":"pro-4","expires_at":"2026-11-20T12:00:00Z","duration":30,"memory":{"limit":2048,"used":512}},
 		"applications":[],"databases":[],"connections":[{"provider":"github","username":"ana","created_at":"2026-09-22T12:00:00.000Z"}],
 		"resource_organization":{"scope":"personal","user_id":"u1","workspace_id":null,"folders":[],"favorites":[]}
 	}`)
@@ -256,7 +256,7 @@ func TestAccount_Get_DecodesFullShape(t *testing.T) {
 	if info.ID != "u1" || info.Name != "Ana" {
 		t.Errorf("flat APIUser fields not decoded: %+v", info.APIUser)
 	}
-	if info.Plan == nil || info.Plan.Name != UserPlanNamePro || info.Plan.Memory.Limit != 2048 || info.Plan.ExpiresAt.IsZero() {
+	if info.Plan == nil || info.Plan.Name != PlanNamePro4 || info.Plan.Memory.Limit != 2048 || info.Plan.ExpiresAt.IsZero() {
 		t.Errorf("Plan not decoded: %+v", info.Plan)
 	}
 	if len(info.Connections) != 1 || info.Connections[0].Provider != "github" {

@@ -15,7 +15,7 @@ const plansCatalogJSON = `{"grid":"v3","cycles":[{"months":1,"discount_percent":
 	`"limits":{"deploys_per_hour":20,"requests_per_minute":120,"requests_per_day":43200,"max_domains":0,"max_domain_ports":0,"manual_backups_per_day":8,"workspace_members":1,"workspace_roles":0,"release_versions":3,"release_retention_days":7,"max_custom_images":0,` +
 	`"blob":{"quota_bytes":10737418240,"max_rules":5,"max_custom_domains":0,"image_transformations_per_month":1000,"s3_requests_per_10s":100}},` +
 	`"features":{"web_published":true,"daily_backups":true,"create_backup":true,"advanced_metrics":false,"create_workspace":false,"custom_domain":false,"custom_subdomain":true,"file_manager":true,"database_manager":false,"auto_deploy":true,"rollback":true,"auto_rollback":false,"zero_downtime":false,"delete_snapshot":true,"powered_by_badge":true,"blob_metadata":false,"blob_share_password":false,"blob_unlimited_upload_rate":false,"blob_no_cache":false,"blob_short_expiration":false}},` +
-	`{"name":"economy","family":null,"legacy":true,"memory_mb":512,"max_vcpus_per_app":1,"price":9.9,"payment_methods":["pix"],"limits":{"blob":{}},"features":{}}]}`
+	`{"name":"pro-4","family":"pro","legacy":false,"memory_mb":4096,"max_vcpus_per_app":2,"price":49.9,"payment_methods":["pix"],"limits":{"blob":{}},"features":{}}]}`
 
 func TestPlans_List_DecodesCatalog(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
@@ -31,7 +31,7 @@ func TestPlans_List_DecodesCatalog(t *testing.T) {
 		t.Fatalf("catalog: %#v", got)
 	}
 	p := got.Plans[0]
-	if p.Name != UserPlanNameStarter1 || p.Family == nil || *p.Family != PlanFamilyStarter || p.Legacy || p.MemoryMB != 1024 || p.Price != 19.9 {
+	if p.Name != PlanNameStarter1 || p.Family == nil || *p.Family != PlanFamilyStarter || p.Legacy || p.MemoryMB != 1024 || p.Price != 19.9 {
 		t.Fatalf("plan: %#v", p)
 	}
 	if p.Limits.RequestsPerMinute != 120 || p.Limits.Blob.QuotaBytes != 10737418240 || !p.Features.AutoDeploy || p.Features.AutoRollback {
@@ -40,8 +40,8 @@ func TestPlans_List_DecodesCatalog(t *testing.T) {
 	if len(p.PaymentMethods) != 2 || p.PaymentMethods[1] != OrderProviderCard {
 		t.Fatalf("payment methods: %#v", p.PaymentMethods)
 	}
-	if got.Plans[1].Family != nil || !got.Plans[1].Legacy || got.Plans[1].Name != UserPlanNameEconomy {
-		t.Fatalf("legacy plan: %#v", got.Plans[1])
+	if got.Plans[1].Family == nil || *got.Plans[1].Family != PlanFamilyPro || got.Plans[1].Name != PlanNamePro4 {
+		t.Fatalf("second plan: %#v", got.Plans[1])
 	}
 }
 
@@ -69,13 +69,13 @@ func TestPlans_List_WorksWithPublicClient(t *testing.T) {
 	}
 }
 
-func TestUserPlanName_V3Constants(t *testing.T) {
-	names := map[UserPlanName]string{
-		UserPlanNameStarter1: "starter-1", UserPlanNameStarter2: "starter-2",
-		UserPlanNamePro4: "pro-4", UserPlanNamePro6: "pro-6", UserPlanNamePro8: "pro-8",
-		UserPlanNameBusiness12: "business-12", UserPlanNameBusiness16: "business-16", UserPlanNameBusiness24: "business-24",
-		UserPlanNameEnterprise32: "enterprise-32", UserPlanNameEnterprise512: "enterprise-512",
-		UserPlanNameEconomy: "economy", UserPlanNameEnterprise30: "enterprise-30",
+func TestPlanName_Constants(t *testing.T) {
+	names := map[PlanName]string{
+		PlanNameStarter1: "starter-1", PlanNameStarter2: "starter-2",
+		PlanNamePro4: "pro-4", PlanNamePro6: "pro-6", PlanNamePro8: "pro-8",
+		PlanNameBusiness12: "business-12", PlanNameBusiness16: "business-16", PlanNameBusiness24: "business-24",
+		PlanNameEnterprise32: "enterprise-32", PlanNameEnterprise512: "enterprise-512",
+		PlanNameEnterprise48: "enterprise-48", PlanNameEnterprise384: "enterprise-384",
 	}
 	for got, want := range names {
 		if string(got) != want {

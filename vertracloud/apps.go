@@ -161,7 +161,6 @@ type ApplicationCluster int
 const (
 	ApplicationClusterUSA1 ApplicationCluster = 1
 	ApplicationClusterUSA2 ApplicationCluster = 2
-	ApplicationClusterUSA3 ApplicationCluster = 3
 )
 
 // ApplicationType is a wire enum.
@@ -283,7 +282,7 @@ type Application struct {
 	Name           string                     `json:"name"`
 	Description    string                     `json:"description,omitempty"`
 	OwnerID        string                     `json:"owner_id"`
-	OwnerPlan      *UserPlanName              `json:"owner_plan"`
+	OwnerPlan      *PlanName                  `json:"owner_plan"`
 	Language       ApplicationLanguage        `json:"language"`
 	RAM            int                        `json:"ram"`
 	Status         ApplicationStatus          `json:"status"`
@@ -340,8 +339,8 @@ type ApplicationDeploySettings struct {
 	// ZeroDowntimeActive is whether the next deploy runs without downtime.
 	ZeroDowntimeActive bool `json:"zero_downtime_active"`
 	// AutoRollback switches back to the previous version, once, when the new
-	// one stops within 60 seconds after a deploy. Acts from the Intermediary
-	// plan; the saved value is returned on any plan.
+	// one stops within 60 seconds after a deploy. Acts when the plan has
+	// PlanFeatures.AutoRollback; the saved value is returned on any plan.
 	AutoRollback bool `json:"auto_rollback"`
 	// HealthCheckPath is the HTTP path called on the new version before it
 	// receives traffic; nil means "/".
@@ -734,8 +733,8 @@ type ApplicationUpdateConfigBody struct {
 	RAM          *int                 `json:"ram,omitempty"`
 	Language     *ApplicationLanguage `json:"language,omitempty"`
 	// Deploy changes the deploy behavior; nil leaves it untouched.
-	// ZeroDowntime "on" needs the Enterprise plan and AutoRollback true needs
-	// Intermediary or higher; below that the call fails with 403
+	// ZeroDowntime "on" needs PlanFeatures.ZeroDowntime and AutoRollback true
+	// needs PlanFeatures.AutoRollback; without them the call fails with 403
 	// PLAN_DOES_NOT_SUPPORT_ZERO_DOWNTIME / PLAN_DOES_NOT_SUPPORT_AUTO_ROLLBACK.
 	Deploy *ApplicationDeploySettingsUpdate `json:"deploy,omitempty"`
 }
@@ -1153,8 +1152,8 @@ type AppsNetworkService interface {
 	// SetSubdomain: PATCH /v1/apps/:id/network/subdomain — scope apps:write.
 	SetSubdomain(ctx context.Context, id, subdomain string, opts ...rest.RequestOpt) (ApplicationSubdomainResponse, error)
 	// Publish: POST /v1/apps/:id/network/publish — scope apps:write.
-	// subdomain empty lets the platform pick one (Pro plan is always random;
-	// Scale can choose).
+	// subdomain empty lets the platform pick one (a plan without
+	// PlanFeatures.CustomSubdomain always gets a random one).
 	Publish(ctx context.Context, id, subdomain string, opts ...rest.RequestOpt) (ApplicationWebPublish, error)
 	// PublishWithPort is Publish plus the port the app listens on (1–65535).
 	// Required for an app on a custom image created without web; ignored for

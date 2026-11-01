@@ -15,13 +15,13 @@ import (
 
 func TestBilling_OrderCreateDecodesDiscountAndRequiredFields(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(201, `{"id":"ord-1","code":null,"status":"unpaid","plan":"pro","duration":30,"discount":{"percent":10,"coupon":"SAVE","price":100},"price":90,"expires_at":null}`)
-	got, err := newBillingService(fake).Orders().Create(context.Background(), OrderCreateBody{Plan: "pro", Months: 1})
+	fake.EnqueueJSON(201, `{"id":"ord-1","code":null,"status":"unpaid","plan":"pro-4","duration":30,"discount":{"percent":10,"coupon":"SAVE","price":100},"price":90,"expires_at":null}`)
+	got, err := newBillingService(fake).Orders().Create(context.Background(), OrderCreateBody{Plan: "pro-4", Months: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	encoded, err := json.Marshal(got)
-	if err != nil || !strings.Contains(string(encoded), `"discount"`) || !strings.Contains(string(encoded), `"duration":30`) || !strings.Contains(string(encoded), `"plan":"pro"`) {
+	if err != nil || !strings.Contains(string(encoded), `"discount"`) || !strings.Contains(string(encoded), `"duration":30`) || !strings.Contains(string(encoded), `"plan":"pro-4"`) {
 		t.Fatalf("order response = %s, err = %v", encoded, err)
 	}
 	for field, wantType := range map[string]string{"Status": "OrderStatus", "Provider": "OrderProvider", "Type": "OrderType"} {
@@ -89,7 +89,7 @@ func TestBilling_RouteMatrix(t *testing.T) {
 		{
 			name: "Orders.Status", wantMethod: http.MethodGet, wantPath: "/v1/orders/" + testOrderID + "/status",
 			enqueue: func(ft *vertratest.FakeRestClient) {
-				ft.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro","months":1}}}`)
+				ft.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro-4","months":1}}}`)
 			},
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Billing.Orders().Status(ctx, testOrderID, opt)
@@ -102,7 +102,7 @@ func TestBilling_RouteMatrix(t *testing.T) {
 				ft.EnqueueJSON(200, `{"id":"order_123","code":null,"status":"unpaid","price":19.9,"expires_at":null}`)
 			},
 			invoke: func(ctx context.Context, c *Client) error {
-				_, err := c.Billing.Orders().Create(ctx, OrderCreateBody{Plan: "pro", Months: 1, Type: OrderTypePurchase}, opt)
+				_, err := c.Billing.Orders().Create(ctx, OrderCreateBody{Plan: "pro-4", Months: 1, Type: OrderTypePurchase}, opt)
 				return err
 			},
 		},
@@ -139,7 +139,7 @@ func TestBilling_RouteMatrix(t *testing.T) {
 		{
 			name: "Redeem", wantMethod: http.MethodPost, wantPath: "/v1/redeem/PROMO2026",
 			enqueue: func(ft *vertratest.FakeRestClient) {
-				ft.EnqueueJSON(200, `{"plan":{"name":"pro","duration":30}}`)
+				ft.EnqueueJSON(200, `{"plan":{"name":"pro-4","duration":30}}`)
 			},
 			invoke: func(ctx context.Context, c *Client) error {
 				_, err := c.Billing.Redeem(ctx, "PROMO2026", opt)
@@ -219,7 +219,7 @@ func TestBilling_Orders_Create_Body(t *testing.T) {
 	svc := newBillingService(fake)
 
 	_, err := svc.Orders().Create(context.Background(), OrderCreateBody{
-		Plan:   "pro",
+		Plan:   "pro-4",
 		Months: 3,
 		Coupon: "SAVE10",
 		Type:   OrderTypeRenew,
@@ -232,7 +232,7 @@ func TestBilling_Orders_Create_Body(t *testing.T) {
 		t.Fatalf("want 1 request, got %d", len(fake.Requests))
 	}
 
-	wantBody := `{"plan":"pro","months":3,"coupon":"SAVE10","type":"renew","source":"dashboard_card"}`
+	wantBody := `{"plan":"pro-4","months":3,"coupon":"SAVE10","type":"renew","source":"dashboard_card"}`
 	if got := string(fake.Requests[0].Body); got != wantBody {
 		t.Errorf("body = %s, want %s", got, wantBody)
 	}
@@ -242,7 +242,7 @@ func TestBilling_Orders_Create_Body(t *testing.T) {
 // in related_to.
 func TestBilling_Orders_Status_Decode(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro","months":1}},"expires_at":"2026-10-16T12:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"id":"order_123","status":"paid","price":19.9,"related_to":{"plan":{"name":"pro-4","months":1}},"expires_at":"2026-10-16T12:00:00.000Z"}`)
 	svc := newBillingService(fake)
 
 	got, err := svc.Orders().Status(context.Background(), testOrderID)
@@ -252,7 +252,7 @@ func TestBilling_Orders_Status_Decode(t *testing.T) {
 	if got.ExpiresAt == nil || got.ExpiresAt.IsZero() {
 		t.Errorf("ExpiresAt = %v, want a timestamp", got.ExpiresAt)
 	}
-	if got.RelatedTo.Plan.Name != "pro" || got.RelatedTo.Plan.Months != 1 {
+	if got.RelatedTo.Plan.Name != "pro-4" || got.RelatedTo.Plan.Months != 1 {
 		t.Errorf("RelatedTo.Plan = %+v, want pro/1", got.RelatedTo.Plan)
 	}
 	if len(fake.Requests) != 1 {
@@ -285,28 +285,28 @@ func TestBilling_Orders_Status_NotFound(t *testing.T) {
 // when empty) and the decoded OrderQuote.
 func TestBilling_Orders_Quote(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"plan":"starter-1","months":6,"list_price":119.4,"period_discount_percent":15,"coupon":{"code":"V3-X","discount":5},"total":96.49,"legacy_price":true,"legacy_price_until":"2026-12-01T00:00:00.000Z","payment_methods":["pix","card"]}`)
+	fake.EnqueueJSON(200, `{"plan":"starter-1","months":6,"list_price":119.4,"period_discount_percent":15,"coupon":{"code":"PROMO-X","discount":5},"total":96.49,"legacy_price":true,"legacy_price_until":"2026-12-01T00:00:00.000Z","payment_methods":["pix","card"]}`)
 	fake.EnqueueJSON(200, `{"plan":"pro-4","months":1,"list_price":50,"period_discount_percent":0,"coupon":null,"total":50,"legacy_price":false,"legacy_price_until":null,"payment_methods":["pix"]}`)
 	svc := newBillingService(fake)
 
-	q, err := svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: UserPlanNameStarter1, Months: 6, Coupon: "V3-X"})
+	q, err := svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: PlanNameStarter1, Months: 6, Coupon: "PROMO-X"})
 	if err != nil {
 		t.Fatalf("Quote: %v", err)
 	}
 	if r := fake.Requests[0]; r.Method != http.MethodPost || r.Path != "/v1/orders/quote" || r.ContentType != "application/json" {
 		t.Errorf("request: %#v", r)
 	}
-	if got, want := string(fake.Requests[0].Body), `{"plan":"starter-1","months":6,"coupon":"V3-X"}`; got != want {
+	if got, want := string(fake.Requests[0].Body), `{"plan":"starter-1","months":6,"coupon":"PROMO-X"}`; got != want {
 		t.Errorf("body = %s, want %s", got, want)
 	}
-	if q.Plan != UserPlanNameStarter1 || q.Months != 6 || q.ListPrice != 119.4 || q.PeriodDiscountPercent != 15 || q.Total != 96.49 || !q.LegacyPrice {
+	if q.Plan != PlanNameStarter1 || q.Months != 6 || q.ListPrice != 119.4 || q.PeriodDiscountPercent != 15 || q.Total != 96.49 || !q.LegacyPrice {
 		t.Errorf("quote: %#v", q)
 	}
-	if q.Coupon == nil || q.Coupon.Code != "V3-X" || q.Coupon.Discount != 5 || q.LegacyPriceUntil == nil || q.LegacyPriceUntil.Year() != 2026 {
+	if q.Coupon == nil || q.Coupon.Code != "PROMO-X" || q.Coupon.Discount != 5 || q.LegacyPriceUntil == nil || q.LegacyPriceUntil.Year() != 2026 {
 		t.Errorf("coupon/until: %#v", q)
 	}
 
-	q, err = svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: UserPlanNamePro4, Months: 1})
+	q, err = svc.Orders().Quote(context.Background(), OrderQuoteBody{Plan: PlanNamePro4, Months: 1})
 	if err != nil {
 		t.Fatalf("Quote: %v", err)
 	}

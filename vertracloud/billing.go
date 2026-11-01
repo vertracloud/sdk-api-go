@@ -254,7 +254,7 @@ type BillingDetails struct {
 
 // OrderCreateBody is the body of POST
 // /v1/orders. Plan and Months are required for every order type. Months is 1, 3, 6 or 12;
-// plans of the previous grid follow the periods they were sold with.
+// every plan accepts every period.
 type OrderCreateBody struct {
 	Plan   string    `json:"plan"`
 	Months int       `json:"months"`
@@ -266,9 +266,9 @@ type OrderCreateBody struct {
 // OrderQuoteBody is the body of POST /v1/orders/quote. Months is 1, 3, 6 or
 // 12.
 type OrderQuoteBody struct {
-	Plan   UserPlanName `json:"plan"`
-	Months int          `json:"months"`
-	Coupon string       `json:"coupon,omitempty"`
+	Plan   PlanName `json:"plan"`
+	Months int      `json:"months"`
+	Coupon string   `json:"coupon,omitempty"`
 }
 
 // OrderQuoteCoupon is the coupon applied to an OrderQuote. Discount is in BRL.
@@ -281,8 +281,8 @@ type OrderQuoteCoupon struct {
 // for a period, with the period discount and an optional coupon applied.
 // Amounts are in BRL.
 type OrderQuote struct {
-	Plan   UserPlanName `json:"plan"`
-	Months int          `json:"months"`
+	Plan   PlanName `json:"plan"`
+	Months int      `json:"months"`
 	// ListPrice is the monthly list price times the months, before any
 	// discount.
 	ListPrice             float64 `json:"list_price"`
@@ -292,7 +292,7 @@ type OrderQuote struct {
 	// Total is the final price.
 	Total float64 `json:"total"`
 	// LegacyPrice is true when the quote uses the price the account had
-	// before the current grid.
+	// before the new plan prices.
 	LegacyPrice bool `json:"legacy_price"`
 	// LegacyPriceUntil is nil when LegacyPrice is false.
 	LegacyPriceUntil *time.Time      `json:"legacy_price_until"`

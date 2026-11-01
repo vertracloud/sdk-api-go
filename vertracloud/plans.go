@@ -17,8 +17,7 @@ const (
 	PlanFamilyEnterprise PlanFamily = "enterprise"
 )
 
-// PlanGrid is the plan grid in force: PlanGridV3 is the current one,
-// PlanGridLegacy the previous one.
+// PlanGrid is the grid name reported by the catalog.
 type PlanGrid string
 
 const (
@@ -81,10 +80,10 @@ type PlanFeatures struct {
 
 // CatalogPlan is one plan of the catalog returned by Plans.List.
 type CatalogPlan struct {
-	Name UserPlanName `json:"name"`
-	// Family is nil for plans of the previous grid.
+	Name PlanName `json:"name"`
+	// Family is nil for a plan outside the four families.
 	Family *PlanFamily `json:"family"`
-	// Legacy is true for plans of the previous grid.
+	// Legacy is true for a plan that is no longer sold.
 	Legacy   bool `json:"legacy"`
 	MemoryMB int  `json:"memory_mb"`
 	// MaxVCPUsPerApp is the highest vCPU count one application can use.
