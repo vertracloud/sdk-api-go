@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/vertracloud/sdk-api-go/compare/v0.4.0...v0.4.1) (2026-11-03)
+
+
+### Features
+
+* add web analytics methods ([c32f424](https://github.com/vertracloud/sdk-api-go/commit/c32f4246e2e81606aad58185c1a3b94b87990cc9))
+
 ## [0.4.0](https://github.com/vertracloud/sdk-api-go/compare/v0.3.3...v0.4.0) (2026-11-01)
 
 
