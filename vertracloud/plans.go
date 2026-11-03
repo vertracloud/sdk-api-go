@@ -33,18 +33,20 @@ type PlanBlobLimits struct {
 }
 
 type PlanLimits struct {
-	DeploysPerHour       int            `json:"deploys_per_hour"`
-	RequestsPerMinute    int            `json:"requests_per_minute"`
-	RequestsPerDay       int            `json:"requests_per_day"`
-	MaxDomains           int            `json:"max_domains"`
-	MaxDomainPorts       int            `json:"max_domain_ports"`
-	ManualBackupsPerDay  int            `json:"manual_backups_per_day"`
-	WorkspaceMembers     int            `json:"workspace_members"`
-	WorkspaceRoles       int            `json:"workspace_roles"`
-	ReleaseVersions      int            `json:"release_versions"`
-	ReleaseRetentionDays int            `json:"release_retention_days"`
-	MaxCustomImages      int            `json:"max_custom_images"`
-	Blob                 PlanBlobLimits `json:"blob"`
+	DeploysPerHour       int `json:"deploys_per_hour"`
+	RequestsPerMinute    int `json:"requests_per_minute"`
+	RequestsPerDay       int `json:"requests_per_day"`
+	MaxDomains           int `json:"max_domains"`
+	MaxDomainPorts       int `json:"max_domain_ports"`
+	ManualBackupsPerDay  int `json:"manual_backups_per_day"`
+	WorkspaceMembers     int `json:"workspace_members"`
+	WorkspaceRoles       int `json:"workspace_roles"`
+	ReleaseVersions      int `json:"release_versions"`
+	ReleaseRetentionDays int `json:"release_retention_days"`
+	MaxCustomImages      int `json:"max_custom_images"`
+	// WebAnalyticsHistoryDays is how many days back Web Analytics can be read.
+	WebAnalyticsHistoryDays int            `json:"web_analytics_history_days"`
+	Blob                    PlanBlobLimits `json:"blob"`
 }
 
 type PlanFeatures struct {
@@ -68,6 +70,10 @@ type PlanFeatures struct {
 	BlobUnlimitedUploadRate bool `json:"blob_unlimited_upload_rate"`
 	BlobNoCache             bool `json:"blob_no_cache"`
 	BlobShortExpiration     bool `json:"blob_short_expiration"`
+	// WebAnalyticsPerformance allows GET /v1/apps/:id/analytics/performance.
+	WebAnalyticsPerformance bool `json:"web_analytics_performance"`
+	// WebAnalyticsRequests allows GET /v1/apps/:id/analytics/requests.
+	WebAnalyticsRequests bool `json:"web_analytics_requests"`
 }
 
 // CatalogPlan is one plan of the catalog returned by Plans.List.

@@ -74,7 +74,7 @@ func parseMultipartRequest(t *testing.T, req vertratest.CapturedCall) (fields ma
 }
 
 // TestApps_RouteMatrix checks, for every non-multipart/non-SSE/non-binary
-// route (38 of the 42), that the Go method issues the expected HTTP method
+// route (42 of the 46), that the Go method issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded correctly. Apps.Create,
 // Apps.Files().Upload, Apps.Download and Apps.Realtime are covered by their
 // own tests below.
@@ -131,6 +131,38 @@ func TestApps_RouteMatrix(t *testing.T) {
 			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `[]`) },
 			invoke: func(ctx context.Context, svc AppsService) error {
 				_, err := svc.Metrics(ctx, testAppID, nil, opts...)
+				return err
+			},
+		},
+		{
+			name: "Analytics.Traffic", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/analytics",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Analytics().Traffic(ctx, testAppID, nil, opts...)
+				return err
+			},
+		},
+		{
+			name: "Analytics.Errors", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/analytics/errors",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Analytics().Errors(ctx, testAppID, nil, opts...)
+				return err
+			},
+		},
+		{
+			name: "Analytics.Performance", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/analytics/performance",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Analytics().Performance(ctx, testAppID, nil, opts...)
+				return err
+			},
+		},
+		{
+			name: "Analytics.Requests", wantMethod: http.MethodGet, wantPath: "/v1/apps/" + testAppID + "/analytics/requests",
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{}`) },
+			invoke: func(ctx context.Context, svc AppsService) error {
+				_, err := svc.Analytics().Requests(ctx, testAppID, nil, opts...)
 				return err
 			},
 		},
@@ -408,8 +440,8 @@ func TestApps_RouteMatrix(t *testing.T) {
 		},
 	}
 
-	if len(cases) != 38 {
-		t.Fatalf("expected 38 table cases (42 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
+	if len(cases) != 42 {
+		t.Fatalf("expected 42 table cases (46 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
 	}
 
 	for _, tc := range cases {

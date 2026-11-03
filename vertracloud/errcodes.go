@@ -7,7 +7,7 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// Error codes of the template and stack routes, as found in APIError.Code.
+// Error codes of the template, stack and web analytics routes, as found in APIError.Code.
 // Compare with the constants instead of retyping the strings:
 //
 //	if apiErr, ok := rest.AsAPIError(err); ok && apiErr.Code == vertracloud.ErrCodeTemplateRAMInsufficient { ... }
@@ -58,6 +58,12 @@ const (
 	ErrCodeStackNameMismatch           = "STACK_NAME_MISMATCH"
 	ErrCodeStackTransformEmpty         = "STACK_TRANSFORM_EMPTY"
 	ErrCodeStackBlobPrefixTaken        = "STACK_BLOB_PREFIX_TAKEN"
+
+	// Web Analytics.
+	ErrCodePlanDoesNotSupportWebAnalyticsPerformance = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE" // 403
+	ErrCodePlanDoesNotSupportWebAnalyticsRequests    = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS"    // 403
+	ErrCodeAnalyticsRangeExceedsPlan                 = "ANALYTICS_RANGE_EXCEEDS_PLAN"                    // 400; details: see AnalyticsRangeExceedsPlan
+	ErrCodeAnalyticsBusy                             = "ANALYTICS_BUSY"                                  // 503; details: see AnalyticsBusyRetryAfter
 
 	// API keys restricted to a Blob folder, or managed by the platform.
 	ErrCodeBlobPrefixDenied = "BLOB_PREFIX_DENIED"
@@ -127,6 +133,23 @@ func TemplateDetachConfirmation(err error) (action TemplateDetachConfirmationAct
 		Action TemplateDetachConfirmationAction `json:"action"`
 	}](err, ErrCodeTemplateDetachConfirmRequired)
 	return d.Action, ok
+}
+
+// AnalyticsRangeExceedsPlan returns the details of an ANALYTICS_RANGE_EXCEEDS_PLAN
+// error (400): how many days back the plan reads and the earliest Start accepted
+// right now. ok is false for any other error.
+func AnalyticsRangeExceedsPlan(err error) (details ApplicationAnalyticsRangeExceedsPlanDetails, ok bool) {
+	return errorDetails[ApplicationAnalyticsRangeExceedsPlanDetails](err, ErrCodeAnalyticsRangeExceedsPlan)
+}
+
+// AnalyticsBusyRetryAfter returns how long to wait after an ANALYTICS_BUSY error
+// (503: analytics is under high demand and no earlier answer is available; try
+// again after the returned duration). ok is false for any other error; the duration is zero when the API sent none.
+func AnalyticsBusyRetryAfter(err error) (wait time.Duration, ok bool) {
+	d, ok := errorDetails[struct {
+		RetryAfter float64 `json:"retry_after"`
+	}](err, ErrCodeAnalyticsBusy)
+	return time.Duration(d.RetryAfter * float64(time.Second)), ok
 }
 
 // ---------------------------------------------------------------------------

@@ -144,6 +144,42 @@ _, err = client.Apps.UpdateConfig(ctx, appID, vertracloud.ApplicationUpdateConfi
 
 `Releases().Preview` returns only the names of the environment variables a rollback would change (`added`, `modified` or `removed`), never their values. To also restore the variables saved with the release, set `RestoreEnvironment` in `ApplicationRollbackBody`; that needs the `apps:envs` scope as well (without it the call fails with 403 `API_KEY_SCOPE_DENIED`). Error codes such as `RELEASE_EXPIRED` or `RESTORE_COOLDOWN` arrive in `APIError.Code` as plain strings.
 
+### Web Analytics
+
+Traffic, errors, performance and the request log of an app's site (scope `apps:read`). Every `params` argument may be `nil`. The window (`Start`, `End`; at most 30 days, within the plan's `Limits.WebAnalyticsHistoryDays`) and the filters (`Filters`: `Country`, `EdgeLocation`, `Host`, `Path` as a prefix, `Method`, `Status` or a class such as `5xx`, `Protocol`, `Device`, `OS`, `Browser`, `Referer`, `ASN`, `IP`, `ContentType`, `CacheStatus`, `Bot`) live in the embedded `ApplicationAnalyticsRange`. A `Value` of a breakdown entry can be sent back as the filter unchanged; `vertracloud.ApplicationAnalyticsNoValue` (`"(none)"`) filters the requests that had no value.
+
+```go
+analytics := client.Apps.Analytics()
+
+traffic, err := analytics.Traffic(ctx, appID, &vertracloud.ApplicationAnalyticsTrafficParams{
+	ApplicationAnalyticsRange: vertracloud.ApplicationAnalyticsRange{
+		Start:   time.Now().Add(-48 * time.Hour),
+		Filters: vertracloud.ApplicationAnalyticsFilters{Country: "BR"},
+	},
+	Compare:    true,
+	Breakdowns: []vertracloud.ApplicationAnalyticsDimension{vertracloud.ApplicationAnalyticsDimensionPath},
+})
+errs, err := analytics.Errors(ctx, appID, &vertracloud.ApplicationAnalyticsErrorsParams{Include4xx: true})
+// CompareStart compares with the period of the same length that starts there (implies Compare).
+week, err := analytics.Errors(ctx, appID, &vertracloud.ApplicationAnalyticsErrorsParams{
+	ApplicationAnalyticsRange: vertracloud.ApplicationAnalyticsRange{Start: time.Now().Add(-24 * time.Hour)},
+	CompareStart:              time.Now().Add(-8 * 24 * time.Hour),
+})
+perf, err := analytics.Performance(ctx, appID, nil) // plans with Features.WebAnalyticsPerformance
+page, err := analytics.Requests(ctx, appID, &vertracloud.ApplicationAnalyticsRequestsParams{Limit: 100}) // plans with Features.WebAnalyticsRequests
+
+it := analytics.RequestsIter(appID, nil) // follows the cursor
+for it.Next(ctx) {
+	r := it.Request()
+	fmt.Println(r.RequestID, r.Status, r.EdgeTimeMs)
+}
+if err := it.Err(); err != nil {
+	return err
+}
+```
+
+An app with no site published answers `WebPublished: false` and empty data. A plan without the route fails with 403 `ErrCodePlanDoesNotSupportWebAnalyticsPerformance` or `ErrCodePlanDoesNotSupportWebAnalyticsRequests`; `vertracloud.AnalyticsRangeExceedsPlan(err)` reads the details of `ErrCodeAnalyticsRangeExceedsPlan` (400) and `vertracloud.AnalyticsBusyRetryAfter(err)` those of `ErrCodeAnalyticsBusy` (503).
+
 ### Custom domains
 
 ```go
@@ -447,7 +483,7 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 
 | Domain | Service | Routes |
 |---|---|---|
-| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`) | 41 |
+| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`, `.Analytics()`) | 45 |
 | Images | `client.Images` | 12 |
 | Templates | `client.Templates` (+ `.Deploys()`, `.ShareLinks()`, `.Share()`, `.Updates()`) | 32 |
 | Stacks | `client.Stacks` (+ `.Members()`, `.Bindings()`, `.Snapshots()`) | 20 |

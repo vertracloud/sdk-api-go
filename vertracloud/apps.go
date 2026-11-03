@@ -15,8 +15,8 @@ import (
 	"github.com/vertracloud/sdk-api-go/rest"
 )
 
-// AppsService groups every /v1/apps/* route (43 routes: runtimes, status,
-// realtime, metrics, logs, download, deploys, network, domains, envs, files, releases).
+// AppsService groups every /v1/apps/* route (47 routes: runtimes, status,
+// realtime, metrics, logs, download, deploys, network, domains, envs, files, releases, analytics).
 //
 // Nested resources (deploys, network, envs, files, releases, and their own children)
 // are exposed as methods returning their own service interface — e.g.
@@ -80,6 +80,7 @@ type AppsService interface {
 	Envs() AppsEnvsService
 	Files() AppsFilesService
 	Releases() AppsReleasesService
+	Analytics() AppsAnalyticsService
 }
 
 // ApplicationRealtimeParams are the optional parameters of AppsService.Realtime.
