@@ -28,7 +28,7 @@ func decodeJSONBody(t *testing.T, req vertratest.CapturedCall) map[string]any {
 	return m
 }
 
-// TestImages_RouteMatrix checks that each of the 13 image routes (the 12
+// TestImages_RouteMatrix checks that each of the 14 image routes (the 13
 // /v1/images routes plus POST /v1/apps/image) issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded.
 func TestImages_RouteMatrix(t *testing.T) {
@@ -82,6 +82,14 @@ func TestImages_RouteMatrix(t *testing.T) {
 			enqueue: func(f *vertratest.FakeRestClient) { f.EnqueueJSON(202, `{"id":"img_123"}`) },
 			invoke: func(ctx context.Context, f *vertratest.FakeRestClient) error {
 				_, err := newImagesService(f).Rebuild(ctx, testImageID, ImageRebuildParams{File: strings.NewReader("zip")}, opts...)
+				return err
+			},
+		},
+		{
+			name: "RebuildFromSource", wantMethod: http.MethodPost, wantPath: imagePath + "/rebuild",
+			enqueue: func(f *vertratest.FakeRestClient) { f.EnqueueJSON(202, `{"id":"img_123","status":"building"}`) },
+			invoke: func(ctx context.Context, f *vertratest.FakeRestClient) error {
+				_, err := newImagesService(f).RebuildFromSource(ctx, testImageID, opts...)
 				return err
 			},
 		},
@@ -156,8 +164,8 @@ func TestImages_RouteMatrix(t *testing.T) {
 		},
 	}
 
-	if len(cases) != 13 {
-		t.Fatalf("expected 13 table cases (12 image routes + POST /v1/apps/image), got %d", len(cases))
+	if len(cases) != 14 {
+		t.Fatalf("expected 14 table cases (13 image routes + POST /v1/apps/image), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
@@ -315,6 +323,27 @@ func TestImages_Rebuild_Multipart(t *testing.T) {
 	}
 	if fileNames["file"] != "image.zip" {
 		t.Errorf("file part filename = %q, want image.zip", fileNames["file"])
+	}
+}
+
+// TestImages_RebuildFromSource_NoBody checks that RebuildFromSource sends no
+// body and decodes the image returned with status "building".
+func TestImages_RebuildFromSource_NoBody(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(202, `{"id":"img_123","status":"building"}`)
+	img, err := newImagesService(fake).RebuildFromSource(context.Background(), testImageID)
+	if err != nil {
+		t.Fatalf("RebuildFromSource: %v", err)
+	}
+	if img.Status != CustomImageStatusBuilding {
+		t.Fatalf("Status = %q, want %q", img.Status, CustomImageStatusBuilding)
+	}
+	req := fake.Requests[0]
+	if req.Method != http.MethodPost || req.Path != "/v1/images/"+testImageID+"/rebuild" {
+		t.Fatalf("request = %s %s", req.Method, req.Path)
+	}
+	if len(req.Body) != 0 {
+		t.Fatalf("body = %q, want empty", req.Body)
 	}
 }
 
@@ -832,6 +861,10 @@ func TestImages_WorkspaceQueryOnEveryRoute(t *testing.T) {
 			_, err := svc.Rebuild(ctx, testImageID, ImageRebuildParams{File: strings.NewReader("zip")}, opts...)
 			return err
 		}},
+		{"RebuildFromSource", http.MethodPost, imagePath + "/rebuild", func(opts ...rest.RequestOpt) error {
+			_, err := svc.RebuildFromSource(ctx, testImageID, opts...)
+			return err
+		}},
 		{"Delete", http.MethodDelete, imagePath, func(opts ...rest.RequestOpt) error {
 			_, err := svc.Delete(ctx, testImageID, ImageDeleteBody{ConfirmName: "node-web"}, opts...)
 			return err
@@ -860,8 +893,8 @@ func TestImages_WorkspaceQueryOnEveryRoute(t *testing.T) {
 			return err
 		}},
 	}
-	if len(routes) != 10 {
-		t.Fatalf("expected 10 workspace routes, got %d", len(routes))
+	if len(routes) != 11 {
+		t.Fatalf("expected 11 workspace routes, got %d", len(routes))
 	}
 
 	for _, rt := range routes {

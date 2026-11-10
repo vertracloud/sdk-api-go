@@ -18,7 +18,7 @@ import (
 // Dockerfile check. Apps that run from an image are created with
 // AppsService.CreateFromImage (POST /v1/apps/image).
 //
-// A build starts in the background: Create and Rebuild return the image with
+// A build starts in the background: Create, Rebuild and RebuildFromSource return the image with
 // Status CustomImageStatusBuilding. Follow it with Logs, or read Get until the
 // status leaves "building".
 //
@@ -28,7 +28,7 @@ import (
 // of one of your private templates fails with IMAGE_IN_USE.
 //
 // To act on an image of a workspace, pass rest.WithWorkspaceID (sent as the
-// workspace_id query parameter) on List, Get, Update, Rebuild, Delete, Versions, Logs,
+// workspace_id query parameter) on List, Get, Update, Rebuild, RebuildFromSource, Delete, Versions, Logs,
 // Context, LinkGitHub and UnlinkGitHub. Rebuild and Logs also take it in their
 // params. Without it, the caller's own images are used.
 type ImagesService interface {
@@ -55,6 +55,15 @@ type ImagesService interface {
 	// that replaces the whole build context. Refused with
 	// IMAGE_BUILD_IN_PROGRESS while a build runs. Apps are not restarted.
 	Rebuild(ctx context.Context, id string, params ImageRebuildParams, opts ...rest.RequestOpt) (CustomImage, error)
+	// RebuildFromSource: POST /v1/images/:id/rebuild — scope images:write. No
+	// body. Builds the image again without uploading anything: an image linked
+	// to GitHub uses the tip of the linked branch, any other uses the build
+	// context of the latest build, including a failed one (so it also repeats a
+	// build that failed). Counts toward the hourly deploy limit. The API
+	// replies 202 with Status "building"; apps keep running the current version
+	// until they are restarted or deployed. Refused with IMAGE_BUILD_IN_PROGRESS
+	// while a build runs. Pass rest.WithWorkspaceID for a workspace image.
+	RebuildFromSource(ctx context.Context, id string, opts ...rest.RequestOpt) (CustomImage, error)
 	// Delete: DELETE /v1/images/:id — scope images:delete. The image, its
 	// versions and its context are deleted, and so is every app created from
 	// it: an image with apps also needs apps:delete. body.ConfirmName must equal
@@ -495,6 +504,14 @@ func (s *imagesServiceImpl) Rebuild(ctx context.Context, id string, params Image
 		{Name: "file", FileName: fileName, Reader: params.File},
 	})
 	data, err := s.rest.Do(ctx, http.MethodPut, imagePath(id, ""), nil, body, contentType, opts...)
+	if err != nil {
+		return CustomImage{}, err
+	}
+	return rest.DecodeJSON[CustomImage](data)
+}
+
+func (s *imagesServiceImpl) RebuildFromSource(ctx context.Context, id string, opts ...rest.RequestOpt) (CustomImage, error) {
+	data, err := s.rest.Do(ctx, http.MethodPost, imagePath(id, "/rebuild"), nil, nil, "", opts...)
 	if err != nil {
 		return CustomImage{}, err
 	}

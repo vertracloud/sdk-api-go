@@ -350,6 +350,8 @@ res, err := client.Images.Check(ctx, vertracloud.ImageCheckBody{
 // res.Refusals block the build; res.Warnings do not; res.SuggestedPort is the first EXPOSE (or 80)
 ```
 
+`RebuildFromSource` builds the image again without uploading anything: an image linked to GitHub uses the tip of the linked branch, any other uses the build context of the latest build, including a failed one. It counts toward the hourly deploy limit and returns with `Status` `CustomImageStatusBuilding`. `Rebuild` replaces the context with a new ZIP.
+
 `Update` renames the image and/or changes its description without building anything; apps keep running. Send only what changes. `Name` is a `*string`; `Description` is a `*Nullable[string]` (as on the other PATCH bodies), because a plain `*string` with `omitempty` cannot send `null`: `NullableValue("text")` sets it, `NullableNull[string]()` removes it, and `nil` leaves it untouched. A name already used by another of your images fails with `APIError.Code` `VALIDATION_ERROR`.
 
 ```go
@@ -484,7 +486,7 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 | Domain | Service | Routes |
 |---|---|---|
 | Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`, `.Analytics()`) | 45 |
-| Images | `client.Images` | 12 |
+| Images | `client.Images` | 13 |
 | Templates | `client.Templates` (+ `.Deploys()`, `.ShareLinks()`, `.Share()`, `.Updates()`) | 32 |
 | Stacks | `client.Stacks` (+ `.Members()`, `.Bindings()`, `.Snapshots()`) | 20 |
 | Databases | `client.Databases` (+ `.Credentials()`) | 14 |
