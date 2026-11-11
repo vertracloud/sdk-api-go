@@ -61,7 +61,8 @@ type ImagesService interface {
 	// context of the latest build, including a failed one (so it also repeats a
 	// build that failed). Counts toward the hourly deploy limit. The API
 	// replies 202 with Status "building"; apps keep running the current version
-	// until they are restarted or deployed. Refused with IMAGE_BUILD_IN_PROGRESS
+	// until they are restarted or deployed, unless the image has auto_update_apps
+	// on (then a successful build restarts them). Refused with IMAGE_BUILD_IN_PROGRESS
 	// while a build runs. Pass rest.WithWorkspaceID for a workspace image.
 	RebuildFromSource(ctx context.Context, id string, opts ...rest.RequestOpt) (CustomImage, error)
 	// Delete: DELETE /v1/images/:id — scope images:delete. The image, its
