@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/vertracloud/sdk-api-go/compare/v0.4.1...v0.4.2) (2026-11-11)
+
+
+### Features
+
+* **images:** rebuild an image from its current source ([c1d7a31](https://github.com/vertracloud/sdk-api-go/commit/c1d7a31ff31923a856911a88e04367b48b1ee97b))
+
 ## [0.4.1](https://github.com/vertracloud/sdk-api-go/compare/v0.4.0...v0.4.1) (2026-11-03)
 
 
