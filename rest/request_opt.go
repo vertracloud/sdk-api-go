@@ -27,8 +27,11 @@ func WithRequestTimeout(d time.Duration) RequestOpt {
 }
 
 // WithIdleTimeout makes a Server-Sent Events stream fail with
-// ErrSSEIdleTimeout when no line arrives within d. Ignored by other calls.
-// Zero (the default) means no idle timeout.
+// ErrSSEIdleTimeout when no line arrives within d. Zero (the default) means
+// no idle timeout. The DownloadToFile methods of the vertracloud package also
+// read it, as the time without a byte before they fail with
+// vertracloud.ErrDownloadStalled (zero there means 60 s, negative none).
+// Ignored by other calls.
 func WithIdleTimeout(d time.Duration) RequestOpt {
 	return func(c *reqopts.Config) { c.IdleTimeout = d }
 }
