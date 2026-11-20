@@ -50,8 +50,10 @@ type PlanLimits struct {
 }
 
 type PlanFeatures struct {
-	WebPublished            bool `json:"web_published"`
-	DailyBackups            bool `json:"daily_backups"`
+	WebPublished bool `json:"web_published"`
+	// DailyAppBackups and DailyDatabaseBackups say which daily backups the plan has.
+	DailyAppBackups         bool `json:"daily_app_backups"`
+	DailyDatabaseBackups    bool `json:"daily_database_backups"`
 	CreateBackup            bool `json:"create_backup"`
 	AdvancedMetrics         bool `json:"advanced_metrics"`
 	CreateWorkspace         bool `json:"create_workspace"`
@@ -63,7 +65,6 @@ type PlanFeatures struct {
 	Rollback                bool `json:"rollback"`
 	AutoRollback            bool `json:"auto_rollback"`
 	ZeroDowntime            bool `json:"zero_downtime"`
-	DeleteSnapshot          bool `json:"delete_snapshot"`
 	PoweredByBadge          bool `json:"powered_by_badge"`
 	BlobMetadata            bool `json:"blob_metadata"`
 	BlobSharePassword       bool `json:"blob_share_password"`
