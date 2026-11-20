@@ -107,11 +107,30 @@ Every method takes a variadic `...rest.RequestOpt` last:
 app, err := client.Apps.Get(ctx, appID, rest.WithWorkspaceID(workspaceID))
 
 // Give one slow call more time
-err = client.Databases.Reset(ctx, dbID, rest.WithRequestTimeout(2*time.Minute))
+_, err = client.Databases.Reset(ctx, dbID, rest.WithRequestTimeout(3*time.Minute))
 
 // Send a parameter or header the SDK does not model yet
 files, err := client.Apps.Files().List(ctx, appID, &vertracloud.ApplicationFileListParams{Path: "/"}, rest.WithQuery("new_param", "1"))
 ```
+
+### Snapshots
+
+Deleting an app or a database, resetting a database and restoring a snapshot run right away and are permanent: they replace or remove the current data. If you may need it again, take a snapshot first with `Snapshots.Create`. Taking a snapshot can take up to 90 s, so `Create` defaults to a 100 s timeout; pass `rest.WithRequestTimeout` to change it.
+
+```go
+if _, err := client.Snapshots.CreateAndWait(ctx, dbID, vertracloud.SnapshotScopeDatabases, nil); err != nil {
+	return err
+}
+if _, err := client.Databases.Reset(ctx, dbID); err != nil {
+	return err
+}
+```
+
+`Apps.Delete` returns only an error, `Databases.Delete` returns the database id and `Databases.Reset` returns the operation status.
+
+Snapshots are limited: 8 per GB of the plan's RAM in 24 hours, and one per resource every 180 s (a request every 5 s per user gets a plain `429 RATE_LIMIT_EXCEEDED`). Past a snapshot limit the API answers `429 SNAPSHOT_RATE_LIMITED`; read it with `vertracloud.SnapshotRateLimitDetails(err)` (`Scope`, `RetryAfter`, `ResetsAt`). Other snapshot errors are `ErrCodeDatabaseNotReady`, `ErrCodeSnapshotFailed`, `ErrCodeSnapshotTimeout`, `ErrCodeSnapshotTooLarge` (`SnapshotTooLargeMaxBytes`), `ErrCodeRestoreCooldown` (`RestoreCooldownRetryAfter`), `ErrCodeRestoreInProgress`, `ErrCodeSnapshotExceedsStorage`, `ErrCodeSnapshotCorrupted`, `ErrCodeSnapshotImportFailed`, `ErrCodeSnapshotEngineMismatch`, `ErrCodeSnapshotVersionNewer`, `ErrCodeStackRestoreMemberFailed`, `ErrCodeAppBuilding` and `ErrCodeOperationInProgress`. Each snapshot has an `Origin`: `manual` or `automatic`.
+
+The file manager accepts files of up to 10 MiB; a larger one fails with `413 FILE_TOO_LARGE` (`vertracloud.FileTooLargeMaxBytes(err)` gives the limit).
 
 Nested resources are accessor methods: `client.Apps.Deploys()`, `client.Apps.Envs()`, `client.Workspaces.Members()`, `client.Billing.Orders()`, …
 
@@ -238,7 +257,7 @@ or custom domain.
 
 ### Uploading and downloading
 
-Uploads are streamed from any `io.Reader`; downloads are streamed to you as an `io.ReadCloser`, so large files never sit in memory. Streamed calls have no default timeout — bound them with `ctx` or `rest.WithRequestTimeout`.
+Uploads are streamed from any `io.Reader`. To download to disk use `DownloadToFile`, the recommended form for large files; `Download` streams the zip to you as an `io.ReadCloser` (no file is held in memory either) when you want to send the bytes somewhere else. Streamed calls have no default timeout — bound them with `ctx` or `rest.WithRequestTimeout`.
 
 ```go
 f, err := os.Open("app.zip")
@@ -253,18 +272,39 @@ app, err := client.Apps.Create(ctx, vertracloud.ApplicationCreateParams{
 	Name:     "my-app",
 })
 
-zip, err := client.Apps.Download(ctx, appID)
+n, err := client.Apps.DownloadToFile(ctx, appID, "backup.zip", nil) // bytes written
 if err != nil {
 	log.Fatal(err)
 }
-defer zip.Close()
-
-out, _ := os.Create("backup.zip")
-defer out.Close()
-_, err = io.Copy(out, zip)
 ```
 
-`client.Snapshots.Download` works the same way.
+`Apps.DownloadToFile` (and `Apps.Download`, which returns the stream) takes a manual snapshot of the app (it shows in the snapshot list and counts in the snapshot quota), follows its job when the API answers `202`, and downloads the snapshot zip. The API key needs the `snapshots:write` and `snapshots:read` scopes. The second argument is a `*vertracloud.WaitOptions` for the wait on the snapshot (`nil` = every 2 s, up to 30 minutes, `vertracloud.DefaultWaitTimeout`; a negative `Timeout` removes the limit); it ends with a `*vertracloud.WaitTimeoutError` (with the last `Job`), a `*vertracloud.SnapshotJobError` when the snapshot fails, and `ctx.Err()` when `ctx` ends. The download itself has no total deadline: a big zip keeps coming as long as bytes arrive; only `ctx`, an explicit `rest.WithRequestTimeout` or, for `DownloadToFile`, the stall limit ends it. `DownloadToFile` writes to a temporary file next to the destination (`path` + `.<random>.part`) and renames it to `path` only when the download ends: a failure, a cancelled `ctx` or a stall removes the temporary file, so `path` never holds a partial file (an existing `path` is replaced at the end). A stall is no byte for 60 s (`vertracloud.DefaultDownloadIdleTimeout`, or `rest.WithIdleTimeout`; negative disables) and fails with `vertracloud.ErrDownloadStalled`. To download a snapshot that already exists, use `client.Snapshots.DownloadToFile(ctx, resourceID, snapshotID, scope, path)` (or `Download` for the stream). A body cut before its `Content-Length` fails with `io.ErrUnexpectedEOF` and no file is kept. For a resource of a workspace, pass `rest.WithWorkspaceID(id)`: it is sent on every request of the flow (take the snapshot, follow the job, download), in `Apps.Download*`, `Snapshots.*`, `SnapshotJobs.*` and the stack snapshot waits.
+
+### Restoring a snapshot
+
+A restore runs as a job. `Restore`, `RestoreTo` and `RestoreWith` answer `202` with a `JobID` (and a `Warning` when `RestoreImageVersion` was asked but the image version no longer exists); the resource is not restored until the job ends. Follow it with `SnapshotJobs.Wait` (or `SnapshotJobs.Get` and `SnapshotJobs.List`; `scope` is optional on `Get` and `Wait`: pass `vertracloud.SnapshotScope("")` to omit it, and `List` takes a `Limit` from 1 to 50). `Wait` returns the job and a nil error when it is `ready`; a `*vertracloud.SnapshotJobError` (`Status` `failed` or `skipped`, `Reason`, `Details`, `Job`) when it ends any other way; a `*vertracloud.WaitTimeoutError` (with the last `Job`) after `WaitOptions.Timeout`, 30 minutes by default, while the job keeps running; and `ctx.Err()` when `ctx` ends. `WaitOptions.OnProgress` is called on every poll while the job has not ended: `job.Progress` (`Phase`, `Percent`, `DoneBytes`, `TotalBytes`, `ETASeconds`) is set while it is running.
+
+```go
+res, err := client.Snapshots.Restore(ctx, appID, snapshotID, vertracloud.SnapshotScopeApplications)
+if err != nil {
+	log.Fatal(err)
+}
+_, err = client.SnapshotJobs.Wait(ctx, appID, res.JobID, vertracloud.SnapshotScopeApplications, &vertracloud.WaitOptions{
+	OnProgress: func(job vertracloud.SnapshotJob) {
+		if p := job.Progress; p != nil && p.Percent != nil {
+			fmt.Printf("%s %.0f%%\n", p.Phase, *p.Percent)
+		}
+	},
+})
+var jobErr *vertracloud.SnapshotJobError
+if errors.As(err, &jobErr) {
+	fmt.Println("restore did not finish:", jobErr.Status, jobErr.Reason) // such as SNAPSHOT_IMPORT_FAILED
+}
+```
+
+Before the job the API can refuse with `400 SNAPSHOT_EXCEEDS_STORAGE` (`vertracloud.SnapshotExceedsStorageDetails(err)`), `409 RESTORE_IN_PROGRESS`, `409 APP_BUILDING` or `429 RESTORE_COOLDOWN` (the wait between restores: 60 s per app, 60 s per user and 120 s per database; `RestoreCooldownRetryAfter(err)` reads `details.retry_after`). While a restore runs, writes to the resource answer `409 RESTORE_IN_PROGRESS`. `Snapshots.Create` can also answer `202` when the snapshot is not ready in time. That is a result, not an error: `SnapshotCreateResult.Accepted()` is true and `JobID` follows with `SnapshotJobs.Wait` (the `Snapshot` is set when the answer was `201`). Or call `Snapshots.CreateAndWait(ctx, resourceID, scope, nil)`, which creates, follows the job and returns the snapshot (same errors as `Wait`).
+
+Creating an app or a database from a snapshot (`SnapshotID`) answers `202` and returns `RestoreJobID`; the resource exists before the restore ends. If that job fails, an app made from a code snapshot is deleted, while a database and an app on a custom image are kept as they are (empty, or with what you wrote since), so check the job.
 
 ### Waiting for the first build
 
@@ -424,7 +464,11 @@ if err == nil && change.RestartRequired {
 }
 ```
 
-`Delete` needs `ConfirmName` equal to the stack name; `StackDeleteModeDissolve` removes only the stack, `StackDeleteModeDeleteAll` deletes the members too. `Members()`, `Bindings()` and `Snapshots()` group the routes of members, connections and whole-stack snapshots; `Connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `Workspaces.Stacks()` and `Workspaces.Templates()`. Error codes of both areas are the `vertracloud.ErrCode*` constants.
+`Delete` needs `ConfirmName` equal to the stack name; `StackDeleteModeDissolve` removes only the stack and `StackDeleteModeDeleteAll` deletes the members too. Both answer `200` right away with `DeletedApps`, `DeletedDatabases` and `DeletedBlob`, and are permanent: take a snapshot first (`Snapshots().Create`) if you may need the data again. `Members()`, `Bindings()` and `Snapshots()` group the routes of members, connections and whole-stack snapshots; `Connection` returns code to connect an app to what it is linked to. Move a stack or a template to a workspace with `Workspaces.Stacks()` and `Workspaces.Templates()`. Error codes of both areas are the `vertracloud.ErrCode*` constants.
+
+`Snapshots().Create` of a stack answers `202` with the id of the stack snapshot (`ID`) and one snapshot job per member (`Jobs`, databases first), each a regular manual snapshot. The stack snapshot is listed as `pending` (`Status`) and becomes `ready` when the last job ends; a failed one is not listed. Follow the jobs like the restore ones, or let `Stacks.Snapshots().WaitForCreate(ctx, res, nil)` do it (same errors as `WaitForRestore`); `Stacks.Snapshots().CreateAndWait(ctx, id, nil)` creates and waits, returning the accepted answer and the final jobs.
+
+`Snapshots().Restore` of a stack also answers `202`, with one restore job per member (`Jobs`: `ResourceID`, `ResourceType`, `JobID`, and a `Warning` on the jobs whose member lost the recorded image version when `RestoreImageVersion` was asked). The server restores the members one after the other (databases first): the stack is back when every job is `ready`, and after a failed member the jobs behind it end `failed` with reason `ErrCodeStackRestoreMemberFailed`. A refusal before the queue keeps the code and `details` of the member. Follow the jobs with `SnapshotJobs.Wait` (scope by `ResourceType`) or let `Stacks.Snapshots().WaitForRestore(ctx, res, nil)` do it (`RestoreAndWait` restores and waits); it returns the final job of each member when all are `ready`, stops at the first one that ends `failed` or `skipped` with a `*vertracloud.SnapshotJobError` (the jobs so far come back too), and is bounded by one `WaitOptions.Timeout` for all of them and by `ctx`.
 
 ### Errors
 
@@ -485,12 +529,13 @@ Also available: `Get`, `Update`, `UpdateMany`, `Copy`, `Move`, `Delete`, `Stats`
 
 | Domain | Service | Routes |
 |---|---|---|
-| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`, `.Analytics()`) | 45 |
+| Apps | `client.Apps` (+ `.Deploys()`, `.Network()`, `.Envs()`, `.Files()`, `.Releases()`, `.Analytics()`) | 44 |
 | Images | `client.Images` | 13 |
 | Templates | `client.Templates` (+ `.Deploys()`, `.ShareLinks()`, `.Share()`, `.Updates()`) | 32 |
 | Stacks | `client.Stacks` (+ `.Members()`, `.Bindings()`, `.Snapshots()`) | 20 |
 | Databases | `client.Databases` (+ `.Credentials()`) | 14 |
 | Snapshots | `client.Snapshots` | 5 |
+| Snapshot jobs | `client.SnapshotJobs` | 2 |
 | Account | `client.Account` (+ `.Sessions()`, `.Folders()`, `.Favorites()`) | 10 |
 | Workspaces | `client.Workspaces` (+ `.Members()`, `.Roles()`, `.Invites()`, `.ActionRequests()`, `.Apps()`, `.Databases()`, `.Templates()`, `.Stacks()`, `.Folders()`, `.Favorites()`) | 34 |
 | Billing | `client.Billing` (+ `.Orders()`, with `Quote`) | 8 |
