@@ -41,10 +41,13 @@ type DatabasesService interface {
 	Start(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseOperationResponse, error)
 	// Stop: POST /v1/databases/:id/stop — scope databases:write.
 	Stop(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseOperationResponse, error)
-	// Reset: POST /v1/databases/:id/reset — scope databases:write. Resets
-	// the database's data.
+	// Reset: POST /v1/databases/:id/reset — scope databases:delete. Resets
+	// the database's data right away. It is permanent: take a snapshot first
+	// (Snapshots.Create) if you may need the data again.
 	Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseOperationResponse, error)
-	// Delete: DELETE /v1/databases/:id — scope databases:delete.
+	// Delete: DELETE /v1/databases/:id — scope databases:delete. Deletes the
+	// database right away and returns its id. It is permanent: take a snapshot
+	// first (Snapshots.Create) if you may need the data again.
 	Delete(ctx context.Context, id string, opts ...rest.RequestOpt) (string, error)
 
 	Credentials() DatabasesCredentialsService
@@ -117,6 +120,12 @@ type Database struct {
 	StackID *string `json:"stack_id,omitempty"`
 	// StackServiceKey is the id of the service of the stack's template this database is; nil when the user added it.
 	StackServiceKey *string `json:"stack_service_key,omitempty"`
+	// RestoreJobID is set only by Databases.Create from a snapshot (the API
+	// answers 202, accepted): the restore job to follow with SnapshotJobs.Wait (scope SnapshotScopeDatabases and
+	// this database's id). The database is created before the restore ends and
+	// is NOT deleted if the job fails: it stays as it is, empty or with what
+	// you wrote, so check the job's Status and Reason.
+	RestoreJobID string `json:"restore_job_id,omitempty"`
 }
 
 // DatabaseVersionCatalog lists the versions of one engine.
@@ -147,6 +156,9 @@ type DatabaseStatusInfo struct {
 	Storage string           `json:"storage"`
 	Network *DatabaseNetwork `json:"network"`
 	Uptime  int              `json:"uptime"`
+	// RestoreJobID is set while a restore of the database is queued or
+	// running (follow it on SnapshotJobs.Get); nil otherwise.
+	RestoreJobID *string `json:"restore_job_id"`
 }
 
 // DatabaseStatusShort is the response of GET /v1/databases/status.
@@ -158,6 +170,9 @@ type DatabaseStatusShort struct {
 	RAM     string `json:"ram"`
 	Storage string `json:"storage"`
 	Running bool   `json:"running"`
+	// RestoreJobID is set while a restore of the database is queued or
+	// running (follow it on SnapshotJobs.Get); nil otherwise.
+	RestoreJobID *string `json:"restore_job_id"`
 }
 
 type DatabaseOperationResponse struct {
