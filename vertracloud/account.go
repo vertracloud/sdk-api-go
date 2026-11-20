@@ -88,8 +88,8 @@ type APIUser struct {
 	Name     string       `json:"name"`
 	Email    string       `json:"email"`
 	Language UserLanguage `json:"language"`
-	// WorkspaceInvitesEnabled: accepts a workspace invite by e-mail
-	// (WORKSPACE_INVITES_DISABLED when off).
+	// WorkspaceInvitesEnabled: receives the workspace invite e-mail. When off,
+	// invites to this account can still be created, but no e-mail is sent.
 	WorkspaceInvitesEnabled bool      `json:"workspace_invites_enabled"`
 	CreatedAt               time.Time `json:"created_at"`
 	UpdatedAt               time.Time `json:"updated_at"`
