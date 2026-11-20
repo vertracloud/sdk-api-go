@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.3](https://github.com/vertracloud/sdk-api-go/compare/v0.4.2...v0.4.3) (2026-11-20)
+
+
+### Features
+
+* **databases:** expose restore_job_id and describe immediate reset and delete ([b306877](https://github.com/vertracloud/sdk-api-go/commit/b3068773b3ad13247c7296143bcc965f9346dfa4))
+* **plans:** report daily app and database backups separately ([b5dcccc](https://github.com/vertracloud/sdk-api-go/commit/b5dcccc42f6181becd14ac610409e421fe2703cd))
+* **snapshots:** add DownloadToFile to stream a snapshot into a file ([ea1ff31](https://github.com/vertracloud/sdk-api-go/commit/ea1ff31839077dd854825f8c829d47fb917e7ba8))
+* **snapshots:** follow snapshots and restores as jobs ([4703c35](https://github.com/vertracloud/sdk-api-go/commit/4703c3526f638ad06c3981a73bc31b825e3cf104))
+* **stacks:** snapshot and restore stacks as jobs ([88b0227](https://github.com/vertracloud/sdk-api-go/commit/88b0227d3048a198be68d9217e4facab33688b4f))
+
 ## [0.4.2](https://github.com/vertracloud/sdk-api-go/compare/v0.4.1...v0.4.2) (2026-11-11)
 
 
