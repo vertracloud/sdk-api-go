@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/vertracloud/sdk-api-go/internal/reqopts"
 	"github.com/vertracloud/sdk-api-go/rest"
@@ -27,6 +28,8 @@ type CapturedCall struct {
 	WorkspaceID string
 	// Header holds the headers set through rest.WithHeader.
 	Header http.Header
+	// Timeout is set by rest.WithRequestTimeout; zero when never set.
+	Timeout time.Duration
 }
 
 // fakeRestResponse is one queued response for FakeRestClient.Do.
@@ -93,6 +96,7 @@ func (f *FakeRestClient) Do(ctx context.Context, method, path string, query url.
 		ContentType: contentType,
 		WorkspaceID: cfg.WorkspaceID,
 		Header:      cfg.Header,
+		Timeout:     cfg.Timeout,
 	})
 	return f.next(method, path)
 }

@@ -76,7 +76,7 @@ func parseMultipartRequest(t *testing.T, req vertratest.CapturedCall) (fields ma
 // TestApps_RouteMatrix checks, for every non-multipart/non-SSE/non-binary
 // route (42 of the 46), that the Go method issues the expected HTTP method
 // and path, and that WithWorkspaceID is forwarded correctly. Apps.Create,
-// Apps.Files().Upload, Apps.Download and Apps.Realtime are covered by their
+// Apps.Files().Upload and Apps.Realtime are covered by their
 // own tests below.
 func TestApps_RouteMatrix(t *testing.T) {
 	opts := []rest.RequestOpt{rest.WithWorkspaceID("ws_1")}
@@ -441,7 +441,7 @@ func TestApps_RouteMatrix(t *testing.T) {
 	}
 
 	if len(cases) != 42 {
-		t.Fatalf("expected 42 table cases (46 routes minus Create/Files.Upload/Download/Realtime), got %d", len(cases))
+		t.Fatalf("expected 42 table cases (45 routes minus Create/Files.Upload/Realtime), got %d", len(cases))
 	}
 
 	for _, tc := range cases {
@@ -1050,32 +1050,6 @@ func TestApps_Releases_Log_DecodesNullableContent(t *testing.T) {
 	}
 	if got := fake.Requests[1].Path; got != "/v1/apps/"+testAppID+"/releases/rel%2Fx/log" {
 		t.Errorf("path = %s, want escaped release id", got)
-	}
-}
-
-// TestApps_Download_Binary checks that Download streams the exact raw
-// bytes of the response body with no {"response": ...} envelope parsing.
-func TestApps_Download_Binary(t *testing.T) {
-	fake := vertratest.NewFakeRestClient(t)
-	raw := []byte("PK\x03\x04-this-is-not-json-{\"response\":true}")
-	fake.EnqueueRaw(200, raw)
-	svc := newAppsService(fake)
-
-	body, err := svc.Download(context.Background(), testAppID)
-	if err != nil {
-		t.Fatalf("Download: %v", err)
-	}
-	got, _ := io.ReadAll(body)
-	body.Close()
-	if !bytes.Equal(got, raw) {
-		t.Errorf("Download bytes = %q, want %q", got, raw)
-	}
-	req := fake.Requests[0]
-	if req.Method != http.MethodGet {
-		t.Errorf("method = %s, want GET", req.Method)
-	}
-	if req.Path != "/v1/apps/"+testAppID+"/download" {
-		t.Errorf("path = %s", req.Path)
 	}
 }
 

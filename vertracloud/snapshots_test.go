@@ -49,7 +49,7 @@ func TestSnapshots_RouteMatrix(t *testing.T) {
 		{
 			name: "Create", wantMethod: http.MethodPost, wantPath: "/v1/users/" + testResourceID + "/snapshots",
 			enqueue: func(fake *vertratest.FakeRestClient) {
-				fake.EnqueueJSON(200, `{"id":"1","resource_id":"`+testResourceID+`","author_id":null,"resource_type":1,"size":"1MB","date":"2026-01-01T00:00:00Z","resource_name":"myapp"}`)
+				fake.EnqueueJSON(200, `{"id":"1","resource_id":"`+testResourceID+`","resource_type":1,"size":"1MB","date":"2026-01-01T00:00:00Z","resource_name":"myapp"}`)
 			},
 			invoke: func(ctx context.Context, svc SnapshotsService) error {
 				_, err := svc.Create(ctx, testResourceID, SnapshotScopeApplications)
@@ -58,7 +58,7 @@ func TestSnapshots_RouteMatrix(t *testing.T) {
 		},
 		{
 			name: "Restore", wantMethod: http.MethodPost, wantPath: "/v1/users/" + testResourceID + "/snapshots/" + testSnapshotID + "/restore",
-			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"message":"restoring"}`) },
+			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `{"job_id":"job_1"}`) },
 			invoke: func(ctx context.Context, svc SnapshotsService) error {
 				_, err := svc.Restore(ctx, testResourceID, testSnapshotID, SnapshotScopeDatabases)
 				return err
@@ -166,7 +166,7 @@ func TestSnapshots_NoWorkspaceQuery(t *testing.T) {
 
 func TestSnapshots_RestoreTo_SendsTargetResourceBody(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"message":"restoring"}`)
+	fake.EnqueueJSON(200, `{"job_id":"job_1"}`)
 	svc := newSnapshotsService(fake)
 
 	if _, err := svc.RestoreTo(context.Background(), testResourceID, testSnapshotID, SnapshotScopeApplications, "app_target"); err != nil {

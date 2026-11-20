@@ -23,15 +23,17 @@ import (
 // these interfaces in minor releases: embed the interface in your mock
 // rather than implementing it from scratch.
 type Client struct {
-	Apps       AppsService
-	Images     ImagesService
-	Templates  TemplatesService
-	Stacks     StacksService
-	Databases  DatabasesService
-	Snapshots  SnapshotsService
-	Account    AccountService
-	Workspaces WorkspacesService
-	Billing    BillingService
+	Apps      AppsService
+	Images    ImagesService
+	Templates TemplatesService
+	Stacks    StacksService
+	Databases DatabasesService
+	Snapshots SnapshotsService
+	// SnapshotJobs follows the jobs that snapshots and restores run as.
+	SnapshotJobs SnapshotJobsService
+	Account      AccountService
+	Workspaces   WorkspacesService
+	Billing      BillingService
 	// Plans is public: it also works with rest.NewPublicClient.
 	Plans  PlansService
 	Status StatusService
@@ -77,17 +79,18 @@ func New(restClient rest.Client, opts ...Option) *Client {
 		opt(&o)
 	}
 	return &Client{
-		Apps:       newAppsService(restClient),
-		Images:     newImagesService(restClient),
-		Templates:  newTemplatesService(restClient),
-		Stacks:     newStacksService(restClient),
-		Databases:  newDatabasesService(restClient),
-		Snapshots:  newSnapshotsService(restClient),
-		Account:    newAccountService(restClient),
-		Workspaces: newWorkspacesService(restClient),
-		Billing:    newBillingService(restClient),
-		Plans:      newPlansService(restClient),
-		Status:     newStatusService(restClient),
-		Blob:       newBlobClient(restClient, o),
+		Apps:         newAppsService(restClient),
+		Images:       newImagesService(restClient),
+		Templates:    newTemplatesService(restClient),
+		Stacks:       newStacksService(restClient),
+		Databases:    newDatabasesService(restClient),
+		Snapshots:    newSnapshotsService(restClient),
+		SnapshotJobs: newSnapshotJobsService(restClient),
+		Account:      newAccountService(restClient),
+		Workspaces:   newWorkspacesService(restClient),
+		Billing:      newBillingService(restClient),
+		Plans:        newPlansService(restClient),
+		Status:       newStatusService(restClient),
+		Blob:         newBlobClient(restClient, o),
 	}
 }

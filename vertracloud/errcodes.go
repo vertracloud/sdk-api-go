@@ -2,6 +2,7 @@ package vertracloud
 
 import (
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/vertracloud/sdk-api-go/rest"
@@ -65,6 +66,27 @@ const (
 	ErrCodeAnalyticsRangeExceedsPlan                 = "ANALYTICS_RANGE_EXCEEDS_PLAN"                    // 400; details: see AnalyticsRangeExceedsPlan
 	ErrCodeAnalyticsBusy                             = "ANALYTICS_BUSY"                                  // 503; details: see AnalyticsBusyRetryAfter
 
+	// Snapshots.
+	ErrCodeDatabaseNotReady         = "DATABASE_NOT_READY"          // 503
+	ErrCodeSnapshotFailed           = "SNAPSHOT_FAILED"             // job reason
+	ErrCodeSnapshotTimeout          = "SNAPSHOT_TIMEOUT"            // 504
+	ErrCodeSnapshotTooLarge         = "SNAPSHOT_TOO_LARGE"          // 413; details: see SnapshotTooLargeMaxBytes
+	ErrCodeSnapshotRateLimited      = "SNAPSHOT_RATE_LIMITED"       // 429; details: see SnapshotRateLimitDetails
+	ErrCodeSnapshotNotFound         = "SNAPSHOT_NOT_FOUND"          // 404
+	ErrCodeSnapshotExceedsStorage   = "SNAPSHOT_EXCEEDS_STORAGE"    // 400; details: see SnapshotExceedsStorageDetails
+	ErrCodeSnapshotCorrupted        = "SNAPSHOT_CORRUPTED"          // job reason
+	ErrCodeSnapshotImportFailed     = "SNAPSHOT_IMPORT_FAILED"      // job reason
+	ErrCodeSnapshotEngineMismatch   = "SNAPSHOT_ENGINE_MISMATCH"    // job reason
+	ErrCodeSnapshotVersionNewer     = "SNAPSHOT_VERSION_NEWER"      // the snapshot's engine line is newer than the database's
+	ErrCodeStackRestoreMemberFailed = "STACK_RESTORE_MEMBER_FAILED" // job reason: an earlier member of the stack restore failed
+	ErrCodeRestoreCooldown          = "RESTORE_COOLDOWN"            // 429; the wait between restores, see RestoreCooldownRetryAfter
+	ErrCodeRestoreInProgress        = "RESTORE_IN_PROGRESS"         // 409; the resource is being restored
+	ErrCodeAppBuilding              = "APP_BUILDING"                // 409; the app is being deployed
+	ErrCodeOperationInProgress      = "OPERATION_IN_PROGRESS"       // 409; e.g. a snapshot of the app is running
+
+	// File manager.
+	ErrCodeFileTooLarge = "FILE_TOO_LARGE" // 413; details: see FileTooLargeMaxBytes
+
 	// API keys restricted to a Blob folder, or managed by the platform.
 	ErrCodeBlobPrefixDenied = "BLOB_PREFIX_DENIED"
 	ErrCodeAPIKeyManaged    = "API_KEY_MANAGED"
@@ -74,11 +96,19 @@ const (
 // with the given code. ok is false for any other error or nil; ok is true
 // with the zero T when the details are missing or unreadable.
 func errorDetails[T any](err error, code string) (details T, ok bool) {
-	apiErr, isAPI := rest.AsAPIError(err)
-	if !isAPI || apiErr.Code != code {
+	var source any
+	var jobErr *SnapshotJobError
+	if errors.As(err, &jobErr) {
+		if jobErr.Reason != code {
+			return details, false
+		}
+		source = jobErr.Details
+	} else if apiErr, isAPI := rest.AsAPIError(err); isAPI && apiErr.Code == code {
+		source = apiErr.Details
+	} else {
 		return details, false
 	}
-	raw, marshalErr := json.Marshal(apiErr.Details)
+	raw, marshalErr := json.Marshal(source)
 	if marshalErr != nil {
 		return details, true
 	}
@@ -150,6 +180,103 @@ func AnalyticsBusyRetryAfter(err error) (wait time.Duration, ok bool) {
 		RetryAfter float64 `json:"retry_after"`
 	}](err, ErrCodeAnalyticsBusy)
 	return time.Duration(d.RetryAfter * float64(time.Second)), ok
+}
+
+// SnapshotRateLimitScope is what a SNAPSHOT_RATE_LIMITED error counted against.
+type SnapshotRateLimitScope string
+
+const (
+	SnapshotRateLimitScopeResource SnapshotRateLimitScope = "resource"
+	SnapshotRateLimitScopeAccount  SnapshotRateLimitScope = "account"
+)
+
+// SnapshotRateLimit is the details of a SNAPSHOT_RATE_LIMITED error.
+type SnapshotRateLimit struct {
+	Scope SnapshotRateLimitScope `json:"scope"`
+	// RetryAfter is how long to wait, in seconds.
+	RetryAfter float64 `json:"retry_after"`
+	// ResetsAt is when the account quota frees a snapshot. Nil unless Scope is "account".
+	ResetsAt *time.Time `json:"resets_at,omitempty"`
+}
+
+// SnapshotRateLimitDetails returns the details of a 429 SNAPSHOT_RATE_LIMITED
+// error. ok is false for any other error.
+func SnapshotRateLimitDetails(err error) (details SnapshotRateLimit, ok bool) {
+	return errorDetails[SnapshotRateLimit](err, ErrCodeSnapshotRateLimited)
+}
+
+// SnapshotExceedsStorage is the details of a SNAPSHOT_EXCEEDS_STORAGE error.
+type SnapshotExceedsStorage struct {
+	// RequiredBytes is the space the snapshot needs.
+	RequiredBytes int64 `json:"required_bytes"`
+	// AvailableBytes is the space the target has.
+	AvailableBytes int64 `json:"available_bytes"`
+	// RequiredRAMMB is, for databases, the smallest memory size in MB whose storage has room. Zero when absent.
+	RequiredRAMMB int `json:"required_ram_mb,omitempty"`
+}
+
+// SnapshotExceedsStorageDetails returns the details of the 400 that refuses a
+// restore (or a create from a snapshot) because the snapshot does not fit in
+// the target. ok is false for any other error.
+func SnapshotExceedsStorageDetails(err error) (details SnapshotExceedsStorage, ok bool) {
+	return errorDetails[SnapshotExceedsStorage](err, ErrCodeSnapshotExceedsStorage)
+}
+
+// acceptedJobID reads the {"response": {"job_id": ...}} body of a 202. ok is
+// false for any other body, such as a snapshot (which has an "id").
+func acceptedJobID(data []byte) (jobID string, ok bool) {
+	var body struct {
+		Response struct {
+			ID    string `json:"id"`
+			JobID string `json:"job_id"`
+		} `json:"response"`
+	}
+	if json.Unmarshal(data, &body) != nil || body.Response.JobID == "" || body.Response.ID != "" {
+		return "", false
+	}
+	return body.Response.JobID, true
+}
+
+// SnapshotTooLargeMaxBytes returns details.max_bytes of a SNAPSHOT_TOO_LARGE
+// error (a direct 413 or a failed job): the largest snapshot allowed. ok is
+// false for any other error; the limit is zero when the API sent none.
+func SnapshotTooLargeMaxBytes(err error) (limit int64, ok bool) {
+	d, ok := errorDetails[struct {
+		MaxBytes int64 `json:"max_bytes"`
+	}](err, ErrCodeSnapshotTooLarge)
+	return d.MaxBytes, ok
+}
+
+// RestoreCooldownRetryAfter returns how long to wait after a 429
+// RESTORE_COOLDOWN (the wait between restores, also on a release rollback):
+// details.retry_after, or the Retry-After header. ok is false for any other
+// error; the duration is zero when the API sent none.
+func RestoreCooldownRetryAfter(err error) (wait time.Duration, ok bool) {
+	d, ok := errorDetails[struct {
+		RetryAfter float64 `json:"retry_after"`
+	}](err, ErrCodeRestoreCooldown)
+	if !ok {
+		return 0, false
+	}
+	if d.RetryAfter > 0 {
+		return time.Duration(d.RetryAfter * float64(time.Second)), true
+	}
+	if apiErr, isAPI := rest.AsAPIError(err); isAPI {
+		if header := apiErr.RetryAfter(); header != nil {
+			return *header, true
+		}
+	}
+	return 0, true
+}
+
+// FileTooLargeMaxBytes returns details.max_bytes of a FILE_TOO_LARGE error
+// from the file manager (10 MiB). ok is false for any other error; the limit
+// is zero when the API sent none.
+func FileTooLargeMaxBytes(err error) (limit int64, ok bool) {
+	d, ok := errorDetails[struct {
+		MaxBytes int64 `json:"max_bytes"`
+	}](err, ErrCodeFileTooLarge)
+	return d.MaxBytes, ok
 }
 
 // ---------------------------------------------------------------------------

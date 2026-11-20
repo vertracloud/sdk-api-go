@@ -43,10 +43,22 @@ type AppsService interface {
 	// Logs: GET /v1/apps/:id/logs — scope apps:read. Returns the raw log
 	// text.
 	Logs(ctx context.Context, id string, opts ...rest.RequestOpt) (string, error)
-	// Download: GET /v1/apps/:id/download — scope apps:read. Streams the
-	// app's zip; the caller must Close it. No timeout applies unless
-	// rest.WithRequestTimeout is passed — bound it with ctx instead.
-	Download(ctx context.Context, id string, opts ...rest.RequestOpt) (io.ReadCloser, error)
+	// Download takes a manual snapshot of the app and streams its zip; the
+	// caller must Close it. It is Snapshots.CreateAndWait (scope applications)
+	// followed by Snapshots.Download, so the file also shows in the snapshot
+	// list and counts in the snapshot quota. The API key needs snapshots:write
+	// and snapshots:read. opts may be nil: opts.Timeout is the total wait for
+	// the snapshot (default DefaultWaitTimeout, 30 minutes) and the download
+	// itself has no total deadline (it ends with ctx, or with
+	// rest.WithRequestTimeout if you pass one). reqOpts go to every request.
+	Download(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (io.ReadCloser, error)
+	// DownloadToFile is Download written to path as the bytes arrive: memory
+	// stays constant whatever the size of the app. The zip goes to a temporary
+	// file next to path, renamed to path only when the download ends; a
+	// failure, a cancelled ctx or a stall (see Snapshots.DownloadToFile)
+	// removes it, so path never holds a partial file. Same scopes, wait options
+	// and errors as Download. Returns the bytes written.
+	DownloadToFile(ctx context.Context, id, path string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (int64, error)
 	// Create: POST /v1/apps — scope apps:write. multipart/form-data; see
 	// ApplicationCreateParams for the File/SnapshotID exclusivity rule. The API
 	// replies 202 with Status "building"; use WaitUntilReady to follow the build.
@@ -58,8 +70,9 @@ type AppsService interface {
 	// IMAGE_TEMPLATE_ONLY: use the template instead.
 	CreateFromImage(ctx context.Context, params ApplicationCreateFromImageParams, opts ...rest.RequestOpt) (Application, error)
 	// WaitUntilReady polls Get until the app leaves "building". It returns the app
-	// when "up", an *AppNotReadyError when "down", and ctx.Err() when ctx ends
-	// (bound it with context.WithTimeout). opts may be nil.
+	// when "up", an *AppNotReadyError when "down", ctx.Err() when ctx ends
+	// (bound it with context.WithTimeout) and a *WaitTimeoutError when
+	// opts.Timeout is set and passes (no limit by default). opts may be nil.
 	WaitUntilReady(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (Application, error)
 	// Start: POST /v1/apps/:id/start — scope apps:write.
 	Start(ctx context.Context, id string, opts ...rest.RequestOpt) (ApplicationOperationResponse, error)
@@ -71,7 +84,9 @@ type AppsService interface {
 	// UpdateConfig: PATCH /v1/apps/:id/config — scope apps:write. Returns the
 	// literal string the API sends back (e.g. "success"), not the app.
 	UpdateConfig(ctx context.Context, id string, body ApplicationUpdateConfigBody, opts ...rest.RequestOpt) (string, error)
-	// Delete: DELETE /v1/apps/:id — scope apps:delete.
+	// Delete: DELETE /v1/apps/:id — scope apps:delete. Deletes the app right
+	// away. It is permanent: take a snapshot first (Snapshots.Create) if you
+	// may need the data again.
 	Delete(ctx context.Context, id string, opts ...rest.RequestOpt) error
 
 	Deploys() AppsDeploysService
@@ -317,6 +332,13 @@ type Application struct {
 	// image, when the recorded image version no longer exists: the app uses
 	// the image's current version. Nil otherwise.
 	Warning *SnapshotImageWarning `json:"warning,omitempty"`
+	// RestoreJobID is set only by Apps.Create from a snapshot (the API answers
+	// 202, accepted): the restore job to follow with SnapshotJobs.Wait (scope
+	// SnapshotScopeApplications and this app's id). The app is created before
+	// the restore ends. If the job
+	// fails, an app made from a code snapshot is deleted, and one on a custom
+	// image is kept as it was.
+	RestoreJobID string `json:"restore_job_id,omitempty"`
 }
 
 // ApplicationBuildError is the code of an application's last build or install failure.
@@ -364,6 +386,9 @@ type ApplicationStatusInfo struct {
 	Storage    string              `json:"storage"`
 	Network    *ApplicationNetwork `json:"network"`
 	Uptime     int                 `json:"uptime"`
+	// RestoreJobID is set while a restore of the application is queued or
+	// running (follow it on SnapshotJobs.Get); nil otherwise.
+	RestoreJobID *string `json:"restore_job_id"`
 }
 
 // ApplicationStatusShort is the response of GET /v1/apps/status.
@@ -380,6 +405,9 @@ type ApplicationStatusShort struct {
 	// Uptime is nil when unknown (stopped container, or a host that didn't
 	// respond) — never 0 as a sentinel; 0 means "just started".
 	Uptime *int `json:"uptime"`
+	// RestoreJobID is set while a restore of the application is queued or
+	// running (follow it on SnapshotJobs.Get); nil otherwise.
+	RestoreJobID *string `json:"restore_job_id"`
 }
 
 type ApplicationMetric struct {
@@ -862,9 +890,24 @@ func (s *appsServiceImpl) Get(ctx context.Context, id string, opts ...rest.Reque
 	return rest.DecodeJSON[Application](data)
 }
 
-// WaitOptions tunes WaitUntilReady. Interval defaults to 2s.
+// WaitOptions tunes the wait helpers: WaitUntilReady, Apps.Download, the
+// snapshot job waits (SnapshotJobs.Wait, Snapshots.CreateAndWait) and the stack
+// waits (WaitForCreate, WaitForRestore and the *AndWait that run them). Timeout is always the total wait; the limit of each request
+// is rest.WithRequestTimeout, passed as a request option. A nil *WaitOptions
+// means every default.
 type WaitOptions struct {
+	// Interval is the pause between polls. Default 2 s.
 	Interval time.Duration
+	// Timeout is the total wait. Zero is the default of the method:
+	// DefaultWaitTimeout (30 minutes) for the snapshot and stack waits and
+	// Apps.Download, and no limit besides ctx for WaitUntilReady. A negative
+	// value removes the limit. When it passes the method returns a
+	// *WaitTimeoutError; the work keeps going on the server. For the stack
+	// waits it is one total for all the jobs.
+	Timeout time.Duration
+	// OnProgress is called with the job on every poll of a snapshot job wait
+	// while the job has not ended: Status, and Progress while it is running.
+	OnProgress func(SnapshotJob)
 }
 
 // AppNotReadyError is returned by WaitUntilReady when the build ended with the
@@ -879,10 +922,7 @@ func (e *AppNotReadyError) Error() string {
 }
 
 func (s *appsServiceImpl) WaitUntilReady(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (Application, error) {
-	interval := 2 * time.Second
-	if opts != nil && opts.Interval > 0 {
-		interval = opts.Interval
-	}
+	poll := newPoller(opts, 2*time.Second, 0)
 	for {
 		app, err := s.Get(ctx, id, reqOpts...)
 		if err != nil {
@@ -898,12 +938,12 @@ func (s *appsServiceImpl) WaitUntilReady(ctx context.Context, id string, opts *W
 			}
 			return app, &AppNotReadyError{Code: code, App: app}
 		}
-		t := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			t.Stop()
-			return app, ctx.Err()
-		case <-t.C:
+		again, waitErr := poll.next(ctx)
+		if waitErr != nil {
+			return app, waitErr
+		}
+		if !again {
+			return app, &WaitTimeoutError{Timeout: poll.timeout}
 		}
 	}
 }
@@ -951,8 +991,22 @@ func (s *appsServiceImpl) Logs(ctx context.Context, id string, opts ...rest.Requ
 	return rest.DecodeJSON[string](data)
 }
 
-func (s *appsServiceImpl) Download(ctx context.Context, id string, opts ...rest.RequestOpt) (io.ReadCloser, error) {
-	return s.rest.DoStream(ctx, http.MethodGet, appPath(id, "/download"), nil, opts...)
+func (s *appsServiceImpl) Download(ctx context.Context, id string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (io.ReadCloser, error) {
+	snapshots := newSnapshotsService(s.rest)
+	snapshot, err := snapshots.CreateAndWait(ctx, id, SnapshotScopeApplications, opts, reqOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return snapshots.Download(ctx, id, snapshot.ID, SnapshotScopeApplications, reqOpts...)
+}
+
+func (s *appsServiceImpl) DownloadToFile(ctx context.Context, id, path string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (int64, error) {
+	snapshots := newSnapshotsService(s.rest)
+	snapshot, err := snapshots.CreateAndWait(ctx, id, SnapshotScopeApplications, opts, reqOpts...)
+	if err != nil {
+		return 0, err
+	}
+	return snapshots.DownloadToFile(ctx, id, snapshot.ID, SnapshotScopeApplications, path, reqOpts...)
 }
 
 func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreateParams, opts ...rest.RequestOpt) (Application, error) {
@@ -1359,7 +1413,9 @@ func (e *appsEnvsServiceImpl) Delete(ctx context.Context, id, envID string, opts
 // Files
 // ---------------------------------------------------------------------------
 
-// AppsFilesService groups the /v1/apps/:id/files* routes.
+// AppsFilesService groups the /v1/apps/:id/files* routes. The file manager
+// accepts files of up to 10 MiB; a larger one fails with 413 FILE_TOO_LARGE
+// (ErrCodeFileTooLarge), and FileTooLargeMaxBytes gives the limit.
 type AppsFilesService interface {
 	// List: GET /v1/apps/:id/files — scope apps:files. path filters to a
 	// directory; empty lists the root.

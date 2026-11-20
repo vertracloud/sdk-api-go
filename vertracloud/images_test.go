@@ -1016,7 +1016,7 @@ func TestApps_CreateFromSnapshot_DecodesWarning(t *testing.T) {
 // response warning is decoded.
 func TestSnapshots_RestoreWith_SendsBody(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"message":"restored","warning":"IMAGE_VERSION_NOT_FOUND"}`)
+	fake.EnqueueJSON(200, `{"job_id":"job_1","warning":"IMAGE_VERSION_NOT_FOUND"}`)
 	svc := newSnapshotsService(fake)
 
 	res, err := svc.RestoreWith(context.Background(), testResourceID, testSnapshotID, SnapshotScopeApplications, SnapshotRestoreParams{RestoreImageVersion: true})
@@ -1038,7 +1038,7 @@ func TestSnapshots_RestoreWith_SendsBody(t *testing.T) {
 		t.Errorf("resource_id present, want absent")
 	}
 
-	fake.EnqueueJSON(200, `{"message":"restored"}`)
+	fake.EnqueueJSON(200, `{"job_id":"job_1"}`)
 	if _, err := svc.RestoreWith(context.Background(), testResourceID, testSnapshotID, SnapshotScopeApplications, SnapshotRestoreParams{TargetResourceID: "app_target"}); err != nil {
 		t.Fatalf("RestoreWith target: %v", err)
 	}
@@ -1050,7 +1050,7 @@ func TestSnapshots_RestoreWith_SendsBody(t *testing.T) {
 		t.Errorf("restore_image_version present, want absent when false")
 	}
 
-	fake.EnqueueJSON(200, `{"message":"restored"}`)
+	fake.EnqueueJSON(200, `{"job_id":"job_1"}`)
 	if _, err := svc.RestoreWith(context.Background(), testResourceID, testSnapshotID, SnapshotScopeApplications, SnapshotRestoreParams{}); err != nil {
 		t.Fatalf("RestoreWith empty: %v", err)
 	}

@@ -11,8 +11,13 @@ import (
 func TestInvalidPathSegmentsNeverReachTheTransport(t *testing.T) {
 	ctx := context.Background()
 	calls := map[string]func(c *Client, bad string) error{
-		"Apps.Get":                 func(c *Client, bad string) error { _, err := c.Apps.Get(ctx, bad); return err },
-		"Apps.Delete":              func(c *Client, bad string) error { return c.Apps.Delete(ctx, bad) },
+		"Apps.Get":         func(c *Client, bad string) error { _, err := c.Apps.Get(ctx, bad); return err },
+		"Apps.Delete":      func(c *Client, bad string) error { return c.Apps.Delete(ctx, bad) },
+		"SnapshotJobs.Get": func(c *Client, bad string) error { _, err := c.SnapshotJobs.Get(ctx, "abc", bad, ""); return err },
+		"SnapshotJobs.List(res)": func(c *Client, bad string) error {
+			_, err := c.SnapshotJobs.List(ctx, bad, SnapshotScopeApplications, nil)
+			return err
+		},
 		"Apps.Domains.Remove":      func(c *Client, bad string) error { return c.Apps.Domains().Remove(ctx, "abc", bad) },
 		"Apps.Domains.Remove(app)": func(c *Client, bad string) error { return c.Apps.Domains().Remove(ctx, bad, "dom") },
 		"Apps.Domains.DNS":         func(c *Client, bad string) error { _, err := c.Apps.Domains().DNS(ctx, "abc", bad); return err },
