@@ -2,6 +2,7 @@ package vertracloud
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"time"
@@ -38,9 +39,12 @@ type StacksService interface {
 	// Update: PATCH /v1/stacks/:stack_id — scope stacks:write. At least one
 	// field is required.
 	Update(ctx context.Context, id string, body StackUpdateBody, opts ...rest.RequestOpt) (Stack, error)
-	// Delete: DELETE /v1/stacks/:stack_id — scope stacks:delete. With mode
-	// "delete_all" an API key also needs apps:delete and databases:delete (and
-	// blob:write when the Blob files are deleted).
+	// Delete: DELETE /v1/stacks/:stack_id — scope stacks:delete. Mode
+	// "dissolve" removes only the stack; "delete_all" deletes every member as
+	// well. Both answer 200 right away, and an API key also needs
+	// apps:delete and databases:delete (and blob:write when the Blob files are
+	// deleted) with "delete_all". Deleting is permanent: take a snapshot first
+	// (Snapshots().Create) if you may need the data again.
 	Delete(ctx context.Context, id string, body StackDeleteBody, opts ...rest.RequestOpt) (StackDeleteResult, error)
 
 	// Members gives access to the members of a stack.
@@ -108,11 +112,39 @@ type StackSnapshotsService interface {
 	// List: GET /v1/stacks/:stack_id/snapshots — scope stacks:read. Newest first.
 	List(ctx context.Context, stackID string, opts ...rest.RequestOpt) ([]StackSnapshot, error)
 	// Create: POST /v1/stacks/:stack_id/snapshots — scope stacks:write. Takes
-	// a snapshot of every member that has data, together.
-	Create(ctx context.Context, stackID string, opts ...rest.RequestOpt) (StackSnapshot, error)
+	// a snapshot of every member that has data, together. Answers 202 with the
+	// id of the stack snapshot and one snapshot job per member (see
+	// StackSnapshotCreateResponse); nothing is taken yet. The stack snapshot is
+	// listed as "pending" and becomes "ready" when the last job ends. A refusal
+	// before the queue keeps the code of the member; a stack snapshot already
+	// running is a 409 OPERATION_IN_PROGRESS.
+	Create(ctx context.Context, stackID string, opts ...rest.RequestOpt) (StackSnapshotCreateResponse, error)
+	// WaitForCreate follows every job of res like WaitForRestore (one
+	// opts.Timeout for all of them, default DefaultWaitTimeout).
+	WaitForCreate(ctx context.Context, res StackSnapshotCreateResponse, opts *WaitOptions, reqOpts ...rest.RequestOpt) ([]SnapshotJob, error)
+	// CreateAndWait is Create followed by WaitForCreate. It returns the
+	// accepted answer (the id of the stack snapshot) and the final job of each
+	// member. An error of Create comes before any wait; an error of the wait
+	// (*SnapshotJobError, *WaitTimeoutError, ctx.Err()) comes with the accepted
+	// answer and the jobs read so far. reqOpts go to every request.
+	CreateAndWait(ctx context.Context, stackID string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (StackSnapshotCreateResponse, []SnapshotJob, error)
 	// Restore: POST /v1/stacks/:stack_id/snapshots/:snapshot_id/restore —
-	// scope stacks:write. Brings every member back, together. params may be nil.
-	Restore(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error)
+	// scope stacks:write. Answers 202 with one restore job per member (see
+	// StackSnapshotRestoreResponse); nothing is restored yet. params may be nil.
+	// The restore replaces the current content of the members: take a snapshot
+	// first (Create) if you may need it again.
+	Restore(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts ...rest.RequestOpt) (StackSnapshotRestoreResponse, error)
+	// WaitForRestore follows every job of res with SnapshotJobs.Wait, in
+	// order, under one opts.Timeout (default DefaultWaitTimeout), and returns
+	// the final job of each member when all are ready. At the first member
+	// that ends failed or skipped it returns the jobs so far and a
+	// *SnapshotJobError (the jobs after a failed restore end failed with
+	// STACK_RESTORE_MEMBER_FAILED); after the timeout a *WaitTimeoutError; and
+	// ctx.Err() when ctx ends. opts may be nil.
+	WaitForRestore(ctx context.Context, res StackSnapshotRestoreResponse, opts *WaitOptions, reqOpts ...rest.RequestOpt) ([]SnapshotJob, error)
+	// RestoreAndWait is Restore followed by WaitForRestore, with the errors
+	// described on CreateAndWait. params may be nil.
+	RestoreAndWait(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts *WaitOptions, reqOpts ...rest.RequestOpt) (StackSnapshotRestoreResponse, []SnapshotJob, error)
 }
 
 // ---------------------------------------------------------------------------
@@ -205,15 +237,23 @@ const (
 	StackBindingValueDomain          StackBindingValue = "domain"
 )
 
+// StackSnapshotStatus is the state of a stack snapshot.
+type StackSnapshotStatus string
+
+const (
+	// StackSnapshotStatusPending means the snapshots of the members are still being taken.
+	StackSnapshotStatusPending StackSnapshotStatus = "pending"
+	// StackSnapshotStatusReady means every member has its snapshot: the stack snapshot can be restored.
+	StackSnapshotStatusReady StackSnapshotStatus = "ready"
+)
+
 // StackSnapshotReason is why a stack snapshot was taken.
 type StackSnapshotReason string
 
 const (
 	StackSnapshotReasonManual StackSnapshotReason = "manual"
-	// StackSnapshotReasonUpdate is a safety snapshot taken before an update to a newer template version.
+	// StackSnapshotReasonUpdate is the snapshot taken before an update to a newer template version.
 	StackSnapshotReasonUpdate StackSnapshotReason = "update"
-	// StackSnapshotReasonDelete was taken when the stack and its members were deleted.
-	StackSnapshotReasonDelete StackSnapshotReason = "delete"
 )
 
 // ---------------------------------------------------------------------------
@@ -323,7 +363,7 @@ type StackBindingChange struct {
 	RestartNotice
 }
 
-// StackDeleteResult is what was deleted together with the stack. Empty with "dissolve".
+// StackDeleteResult is what was deleted together with the stack. Both lists are empty with "dissolve".
 type StackDeleteResult struct {
 	DeletedApps      []string `json:"deleted_apps"`
 	DeletedDatabases []string `json:"deleted_databases"`
@@ -336,7 +376,10 @@ type StackSnapshotMember struct {
 	// ResourceType is "application" or "database".
 	ResourceType WorkspaceResourceType `json:"resource_type"`
 	ResourceID   string                `json:"resource_id"`
-	SnapshotID   string                `json:"snapshot_id"`
+	// SnapshotID is empty while the stack snapshot is pending.
+	SnapshotID string `json:"snapshot_id"`
+	// JobID is the job to follow while the stack snapshot is pending; empty once it is ready.
+	JobID string `json:"job_id,omitempty"`
 }
 
 // StackSnapshot is a snapshot of every member of a stack taken together.
@@ -344,7 +387,9 @@ type StackSnapshot struct {
 	ID      string              `json:"id"`
 	StackID string              `json:"stack_id"`
 	Reason  StackSnapshotReason `json:"reason"`
-	Date    time.Time           `json:"date"`
+	// Status is "pending" while the snapshots of the members are being taken and "ready" once every member has its snapshot. A stack snapshot that failed is not listed.
+	Status StackSnapshotStatus `json:"status"`
+	Date   time.Time           `json:"date"`
 	// Size is the total size, human readable.
 	Size string `json:"size"`
 	// Members is the snapshot of each member that has data.
@@ -673,14 +718,67 @@ func (s *stackSnapshotsServiceImpl) List(ctx context.Context, stackID string, op
 	return templateCall[[]StackSnapshot](ctx, s.rest, http.MethodGet, stackPath(stackID, "/snapshots"), nil, nil, opts)
 }
 
-func (s *stackSnapshotsServiceImpl) Create(ctx context.Context, stackID string, opts ...rest.RequestOpt) (StackSnapshot, error) {
-	return templateCall[StackSnapshot](ctx, s.rest, http.MethodPost, stackPath(stackID, "/snapshots"), nil, nil, opts)
+func (s *stackSnapshotsServiceImpl) Create(ctx context.Context, stackID string, opts ...rest.RequestOpt) (StackSnapshotCreateResponse, error) {
+	return templateCall[StackSnapshotCreateResponse](ctx, s.rest, http.MethodPost, stackPath(stackID, "/snapshots"), nil, nil, opts)
 }
 
-func (s *stackSnapshotsServiceImpl) Restore(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts ...rest.RequestOpt) (SnapshotRestoreResponse, error) {
+func (s *stackSnapshotsServiceImpl) CreateAndWait(ctx context.Context, stackID string, opts *WaitOptions, reqOpts ...rest.RequestOpt) (StackSnapshotCreateResponse, []SnapshotJob, error) {
+	res, err := s.Create(ctx, stackID, reqOpts...)
+	if err != nil {
+		return StackSnapshotCreateResponse{}, nil, err
+	}
+	jobs, err := s.WaitForCreate(ctx, res, opts, reqOpts...)
+	return res, jobs, err
+}
+
+func (s *stackSnapshotsServiceImpl) RestoreAndWait(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts *WaitOptions, reqOpts ...rest.RequestOpt) (StackSnapshotRestoreResponse, []SnapshotJob, error) {
+	res, err := s.Restore(ctx, stackID, snapshotID, params, reqOpts...)
+	if err != nil {
+		return StackSnapshotRestoreResponse{}, nil, err
+	}
+	jobs, err := s.WaitForRestore(ctx, res, opts, reqOpts...)
+	return res, jobs, err
+}
+
+func (s *stackSnapshotsServiceImpl) WaitForCreate(ctx context.Context, res StackSnapshotCreateResponse, opts *WaitOptions, reqOpts ...rest.RequestOpt) ([]SnapshotJob, error) {
+	return s.waitJobs(ctx, res.Jobs, opts, reqOpts)
+}
+
+func (s *stackSnapshotsServiceImpl) Restore(ctx context.Context, stackID, snapshotID string, params *StackSnapshotRestoreParams, opts ...rest.RequestOpt) (StackSnapshotRestoreResponse, error) {
 	var body any
 	if params != nil {
 		body = *params
 	}
-	return templateCall[SnapshotRestoreResponse](ctx, s.rest, http.MethodPost, stackPath(stackID, "/snapshots/"+url.PathEscape(snapshotID)+"/restore"), nil, body, opts)
+	return templateCall[StackSnapshotRestoreResponse](ctx, s.rest, http.MethodPost, stackPath(stackID, "/snapshots/"+url.PathEscape(snapshotID)+"/restore"), nil, body, opts)
+}
+
+func (s *stackSnapshotsServiceImpl) WaitForRestore(ctx context.Context, res StackSnapshotRestoreResponse, opts *WaitOptions, reqOpts ...rest.RequestOpt) ([]SnapshotJob, error) {
+	return s.waitJobs(ctx, res.Jobs, opts, reqOpts)
+}
+
+func (s *stackSnapshotsServiceImpl) waitJobs(ctx context.Context, items []StackSnapshotJob, opts *WaitOptions, reqOpts []rest.RequestOpt) ([]SnapshotJob, error) {
+	snapshots := newSnapshotJobsService(s.rest)
+	jobs := make([]SnapshotJob, 0, len(items))
+	poll := newPoller(opts, 2*time.Second, DefaultWaitTimeout)
+	var perJob WaitOptions
+	if opts != nil {
+		perJob = *opts
+	}
+	for _, item := range items {
+		perJob.Timeout = poll.remaining()
+		scope := SnapshotScopeApplications
+		if item.ResourceType == StackMemberTypeDatabase {
+			scope = SnapshotScopeDatabases
+		}
+		job, err := snapshots.Wait(ctx, item.ResourceID, item.JobID, scope, &perJob, reqOpts...)
+		if err != nil {
+			var timedOut *WaitTimeoutError
+			if errors.As(err, &timedOut) {
+				timedOut.Timeout = poll.timeout
+			}
+			return jobs, err
+		}
+		jobs = append(jobs, job)
+	}
+	return jobs, nil
 }

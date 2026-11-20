@@ -147,7 +147,7 @@ type TemplateShareService interface {
 
 // TemplateUpdatesService groups the update and detach routes of what was
 // created from a template. An update is never automatic: it runs only when
-// you ask. It takes a safety snapshot, updates the services one after the
+// you ask. It takes a snapshot, updates the services one after the
 // other and, if one fails, goes back to the snapshot.
 type TemplateUpdatesService interface {
 	// AppInfo: GET /v1/apps/:id/template/update — scope templates:read. What
@@ -940,6 +940,11 @@ type TemplateDeployStepState struct {
 	Status     TemplateDeployStepStatus `json:"status"`
 	StartedAt  *time.Time               `json:"started_at"`
 	FinishedAt *time.Time               `json:"finished_at"`
+	// Jobs is set only on the "snapshot" and "rollback" steps of an update: one
+	// job per application or database (a snapshot job on "snapshot", a restore
+	// job on "rollback"), present once the step has queued them. Follow each
+	// with SnapshotJobs.Get or Wait using ResourceID. Nil otherwise.
+	Jobs []StackSnapshotJob `json:"jobs,omitempty"`
 }
 
 // TemplateDeployError is why a job failed.
@@ -1333,7 +1338,7 @@ type TemplateUpdateInfo struct {
 	FreeRAM         int                      `json:"free_ram"`
 	// OpensPermissions is true when the new version gives more permissions.
 	OpensPermissions bool `json:"opens_permissions"`
-	// RollbackWithData is true when going back to the safety snapshot restores the data as well.
+	// RollbackWithData is true when going back to the snapshot restores the data as well.
 	RollbackWithData bool `json:"rollback_with_data"`
 	// Blocked is why the update cannot run now; nil when it can.
 	Blocked *TemplateUpdateBlocked `json:"blocked"`

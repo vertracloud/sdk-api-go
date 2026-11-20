@@ -429,6 +429,22 @@ func TestTemplates_FromAppBody(t *testing.T) {
 	}
 }
 
+func TestTemplates_DeployStepJobsDecode(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"dep_1","kind":"update","status":"running","current_step":"snapshot","steps":[{"step":"validate","status":"done","started_at":null,"finished_at":null},{"step":"snapshot","status":"running","started_at":null,"finished_at":null,"jobs":[{"resource_id":"a1","resource_type":"application","job_id":"j1"},{"resource_id":"d1","resource_type":"database","job_id":"j2"}]}],"outputs":[]}`)
+	job, err := newTemplatesService(fake).Deploys().Get(context.Background(), "dep_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(job.Steps) != 2 || job.Steps[0].Jobs != nil {
+		t.Fatalf("steps = %+v", job.Steps)
+	}
+	jobs := job.Steps[1].Jobs
+	if len(jobs) != 2 || jobs[0].ResourceID != "a1" || jobs[0].ResourceType != StackMemberTypeApplication || jobs[1].JobID != "j2" || jobs[1].ResourceType != StackMemberTypeDatabase {
+		t.Errorf("jobs = %+v", jobs)
+	}
+}
+
 func TestTemplates_DraftDecodes(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueJSON(200, `{"members":[{"resource_id":"a1","resource_type":"application","name":"api","ram":{"min":128,"recommended":256},"env":[{"key":"API_KEY","looks_secret":true,"suggested_mode":"question"}],"paths":[{"path":".env","type":"file","selected":false,"reason":"env_file"},{"path":"src","type":"directory","selected":true,"reason":null}]}]}`)

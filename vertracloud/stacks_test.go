@@ -2,9 +2,11 @@ package vertracloud
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/vertracloud/sdk-api-go/internal/vertratest"
 	"github.com/vertracloud/sdk-api-go/rest"
@@ -206,9 +208,24 @@ func TestStacks_UpdateDescriptionNullable(t *testing.T) {
 	}
 }
 
-func TestStacks_DeleteBody(t *testing.T) {
+func TestStacks_DeleteDissolveDecodesTheResult(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `{"deleted_apps":["a"],"deleted_databases":["d"],"deleted_blob":true}`)
+	fake.EnqueueJSON(200, `{"deleted_apps":[],"deleted_databases":[],"deleted_blob":false}`)
+	res, err := newStacksService(fake).Delete(context.Background(), "stk_1", StackDeleteBody{Mode: StackDeleteModeDissolve, ConfirmName: "loja", Blob: StackBlobDispositionKeep})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(fake.Requests[0].Body); got != `{"mode":"dissolve","confirm_name":"loja","blob":"keep"}` {
+		t.Errorf("body = %s", got)
+	}
+	if len(res.DeletedApps) != 0 || len(res.DeletedDatabases) != 0 || res.DeletedBlob {
+		t.Errorf("res = %+v", res)
+	}
+}
+
+func TestStacks_DeleteAllAnswers200WithWhatWasDeleted(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"deleted_apps":["app_1"],"deleted_databases":["db_1"],"deleted_blob":true}`)
 	res, err := newStacksService(fake).Delete(context.Background(), "stk_1", StackDeleteBody{Mode: StackDeleteModeDeleteAll, ConfirmName: "loja", Blob: StackBlobDispositionDelete})
 	if err != nil {
 		t.Fatal(err)
@@ -216,8 +233,11 @@ func TestStacks_DeleteBody(t *testing.T) {
 	if got := string(fake.Requests[0].Body); got != `{"mode":"delete_all","confirm_name":"loja","blob":"delete"}` {
 		t.Errorf("body = %s", got)
 	}
-	if res.DeletedApps[0] != "a" || res.DeletedDatabases[0] != "d" || !res.DeletedBlob {
+	if len(res.DeletedApps) != 1 || res.DeletedApps[0] != "app_1" || len(res.DeletedDatabases) != 1 || res.DeletedDatabases[0] != "db_1" || !res.DeletedBlob {
 		t.Errorf("res = %+v", res)
+	}
+	if fake.Requests[0].Timeout != 0 {
+		t.Errorf("timeout = %v, want the client default", fake.Requests[0].Timeout)
 	}
 }
 
@@ -314,22 +334,22 @@ func TestStacks_BindingBodies(t *testing.T) {
 
 func TestStacks_SnapshotsDecodeAndRestoreBody(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
-	fake.EnqueueJSON(200, `[{"id":"snp_1","stack_id":"stk_1","reason":"update","date":"2026-10-27T10:00:00Z","size":"12 MB","members":[{"resource_type":"application","resource_id":"app_1","snapshot_id":"s1"}],"closed":true}]`)
-	fake.EnqueueJSON(200, `{"message":"ok","warning":"IMAGE_VERSION_NOT_FOUND"}`)
-	fake.EnqueueJSON(200, `{"message":"ok"}`)
+	fake.EnqueueJSON(200, `[{"id":"snp_1","stack_id":"stk_1","reason":"update","date":"2026-10-27T10:00:00Z","size":"12 MB","status":"ready","members":[{"resource_type":"application","resource_id":"app_1","snapshot_id":"s1"}],"closed":true}]`)
+	fake.EnqueueRaw(202, []byte(`{"response":{"jobs":[{"resource_id":"db_1","resource_type":"database","job_id":"j1"},{"resource_id":"app_1","resource_type":"application","job_id":"j2","warning":"IMAGE_VERSION_NOT_FOUND"}]}}`))
+	fake.EnqueueRaw(202, []byte(`{"response":{"jobs":[]}}`))
 	s := newStacksService(fake).Snapshots()
 	list, err := s.List(context.Background(), "stk_1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list[0].Reason != StackSnapshotReasonUpdate || !list[0].Closed || list[0].Members[0].SnapshotID != "s1" || list[0].Members[0].ResourceType != WorkspaceResourceTypeApplication {
+	if list[0].Reason != StackSnapshotReasonUpdate || list[0].Status != StackSnapshotStatusReady || !list[0].Closed || list[0].Members[0].SnapshotID != "s1" || list[0].Members[0].ResourceType != WorkspaceResourceTypeApplication {
 		t.Errorf("list = %+v", list)
 	}
 	res, err := s.Restore(context.Background(), "stk_1", "snp_1", &StackSnapshotRestoreParams{RestoreImageVersion: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(fake.Requests[1].Body) != `{"restore_image_version":true}` || res.Warning == nil || *res.Warning != SnapshotImageWarningImageVersionNotFound {
+	if string(fake.Requests[1].Body) != `{"restore_image_version":true}` || res.Jobs[1].Warning == nil || *res.Jobs[1].Warning != SnapshotImageWarningImageVersionNotFound || res.Jobs[0].Warning != nil || len(res.Jobs) != 2 || res.Jobs[0].ResourceType != StackMemberTypeDatabase || res.Jobs[1].JobID != "j2" {
 		t.Errorf("body = %s res = %+v", fake.Requests[1].Body, res)
 	}
 	if _, err := s.Restore(context.Background(), "stk_1", "snp_1", nil); err != nil {
@@ -337,6 +357,48 @@ func TestStacks_SnapshotsDecodeAndRestoreBody(t *testing.T) {
 	}
 	if len(fake.Requests[2].Body) != 0 || fake.Requests[2].ContentType != "" {
 		t.Errorf("a nil params sends no body, got %q (%s)", fake.Requests[2].Body, fake.Requests[2].ContentType)
+	}
+}
+
+func TestStacks_WaitForRestoreFollowsEachMemberWithItsScope(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"j1","kind":"restore","resource_id":"db_1","status":"ready","created_at":"2026-11-17T10:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"id":"j2","kind":"restore","resource_id":"app_1","status":"ready","created_at":"2026-11-17T10:00:00.000Z"}`)
+	res := StackSnapshotRestoreResponse{Jobs: []StackSnapshotJob{
+		{ResourceID: "db_1", ResourceType: StackMemberTypeDatabase, JobID: "j1"},
+		{ResourceID: "app_1", ResourceType: StackMemberTypeApplication, JobID: "j2"},
+	}}
+	jobs, err := newStacksService(fake).Snapshots().WaitForRestore(context.Background(), res, &WaitOptions{Interval: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 2 || jobs[0].Status != SnapshotJobStatusReady || jobs[1].Status != SnapshotJobStatusReady {
+		t.Errorf("jobs = %+v", jobs)
+	}
+	if r := fake.Requests[0]; r.Path != "/v1/users/db_1/snapshots/jobs/j1" || r.Query.Get("scope") != "databases" {
+		t.Errorf("first request = %s %v", r.Path, r.Query)
+	}
+	if r := fake.Requests[1]; r.Path != "/v1/users/app_1/snapshots/jobs/j2" || r.Query.Get("scope") != "applications" {
+		t.Errorf("second request = %s %v", r.Path, r.Query)
+	}
+}
+
+func TestStacks_WaitForRestoreStopsAtTheFirstFailedMember(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"j1","kind":"restore","resource_id":"db_1","status":"ready","created_at":"2026-11-17T10:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"id":"j2","kind":"restore","resource_id":"app_1","status":"failed","reason":"SNAPSHOT_IMPORT_FAILED","created_at":"2026-11-17T10:00:00.000Z"}`)
+	res := StackSnapshotRestoreResponse{Jobs: []StackSnapshotJob{
+		{ResourceID: "db_1", ResourceType: StackMemberTypeDatabase, JobID: "j1"},
+		{ResourceID: "app_1", ResourceType: StackMemberTypeApplication, JobID: "j2"},
+		{ResourceID: "app_2", ResourceType: StackMemberTypeApplication, JobID: "j3"},
+	}}
+	jobs, err := newStacksService(fake).Snapshots().WaitForRestore(context.Background(), res, &WaitOptions{Interval: time.Millisecond})
+	var jobErr *SnapshotJobError
+	if !errors.As(err, &jobErr) || jobErr.Reason != ErrCodeSnapshotImportFailed || jobErr.Job.ID != "j2" {
+		t.Fatalf("err = %v", err)
+	}
+	if len(jobs) != 1 || len(fake.Requests) != 2 {
+		t.Errorf("jobs so far = %d, requests = %d", len(jobs), len(fake.Requests))
 	}
 }
 
@@ -403,5 +465,75 @@ func TestWorkspaces_MoveTemplatesAndStacks(t *testing.T) {
 		if got := fake.Requests[i]; got.Method != w.method || got.Path != w.path {
 			t.Errorf("request %d = %s %s, want %s %s", i, got.Method, got.Path, w.method, w.path)
 		}
+	}
+}
+
+func TestStacks_SnapshotsCreateAnswers202AndWaitForCreateFollowsEachMember(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueRaw(202, []byte(`{"response":{"id":"grp_1","jobs":[{"resource_id":"db_1","resource_type":"database","job_id":"j1"},{"resource_id":"app_1","resource_type":"application","job_id":"j2"}]}}`))
+	fake.EnqueueJSON(200, `{"id":"j1","kind":"snapshot","resource_id":"db_1","status":"ready","created_at":"2026-11-18T10:00:00.000Z"}`)
+	fake.EnqueueJSON(200, `{"id":"j2","kind":"snapshot","resource_id":"app_1","status":"ready","created_at":"2026-11-18T10:00:00.000Z"}`)
+	s := newStacksService(fake).Snapshots()
+	res, err := s.Create(context.Background(), "stk_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := fake.Requests[0]; r.Method != http.MethodPost || r.Path != "/v1/stacks/stk_1/snapshots" || res.ID != "grp_1" || len(res.Jobs) != 2 || res.Jobs[0].ResourceType != StackMemberTypeDatabase || res.Jobs[1].JobID != "j2" {
+		t.Errorf("request = %s %s res = %+v", r.Method, r.Path, res)
+	}
+	if len(fake.Requests) != 1 {
+		t.Fatalf("Create must not wait: %d requests", len(fake.Requests))
+	}
+	jobs, err := s.WaitForCreate(context.Background(), res, &WaitOptions{Interval: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 2 || jobs[0].Status != SnapshotJobStatusReady || jobs[1].Status != SnapshotJobStatusReady {
+		t.Errorf("jobs = %+v", jobs)
+	}
+	if r := fake.Requests[1]; r.Path != "/v1/users/db_1/snapshots/jobs/j1" || r.Query.Get("scope") != "databases" {
+		t.Errorf("first wait request = %s %v", r.Path, r.Query)
+	}
+	if r := fake.Requests[2]; r.Path != "/v1/users/app_1/snapshots/jobs/j2" || r.Query.Get("scope") != "applications" {
+		t.Errorf("second wait request = %s %v", r.Path, r.Query)
+	}
+}
+
+func TestStacks_SnapshotsCreateAndWaitCreatesThenFollowsEveryMember(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueRaw(202, []byte(`{"response":{"id":"grp_1","jobs":[{"resource_id":"db_1","resource_type":"database","job_id":"j1"}]}}`))
+	fake.EnqueueJSON(200, `{"id":"j1","kind":"snapshot","resource_id":"db_1","status":"ready","created_at":"2026-11-18T10:00:00.000Z"}`)
+
+	res, jobs, err := newStacksService(fake).Snapshots().CreateAndWait(context.Background(), "stk_1", &WaitOptions{Interval: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ID != "grp_1" || len(jobs) != 1 || jobs[0].Status != SnapshotJobStatusReady || len(fake.Requests) != 2 {
+		t.Errorf("res = %+v jobs = %+v requests = %d", res, jobs, len(fake.Requests))
+	}
+}
+
+func TestStacks_SnapshotsRestoreAndWaitRestoresThenFollowsEveryMember(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueRaw(202, []byte(`{"response":{"jobs":[{"resource_id":"app_1","resource_type":"application","job_id":"j2"}]}}`))
+	fake.EnqueueJSON(200, `{"id":"j2","kind":"restore","resource_id":"app_1","status":"ready","created_at":"2026-11-18T10:00:00.000Z"}`)
+
+	res, jobs, err := newStacksService(fake).Snapshots().RestoreAndWait(context.Background(), "stk_1", "snp_1", &StackSnapshotRestoreParams{RestoreImageVersion: true}, &WaitOptions{Interval: time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := fake.Requests[0]; r.Path != "/v1/stacks/stk_1/snapshots/snp_1/restore" || string(r.Body) != `{"restore_image_version":true}` {
+		t.Errorf("restore request = %s %s", r.Path, r.Body)
+	}
+	if len(res.Jobs) != 1 || len(jobs) != 1 || jobs[0].ID != "j2" {
+		t.Errorf("res = %+v jobs = %+v", res, jobs)
+	}
+}
+
+func TestStacks_SnapshotsRestoreAndWaitDoesNotPollAfterARefusal(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueError(409, `{"code":"RESTORE_IN_PROGRESS"}`)
+	if _, _, err := newStacksService(fake).Snapshots().RestoreAndWait(context.Background(), "stk_1", "snp_1", nil, nil); err == nil || len(fake.Requests) != 1 {
+		t.Fatalf("err = %v, requests = %d", err, len(fake.Requests))
 	}
 }
