@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4](https://github.com/vertracloud/sdk-api-go/compare/v0.4.3...v0.4.4) (2026-11-24)
+
+
+### Features
+
+* auto restart, one-time database passwords, live metrics and metric events ([f70763f](https://github.com/vertracloud/sdk-api-go/commit/f70763f52b7bd11130978309aecfc40af6f2d472))
+
 ## [0.4.3](https://github.com/vertracloud/sdk-api-go/compare/v0.4.2...v0.4.3) (2026-11-20)
 
 
