@@ -401,7 +401,8 @@ func TestApps_RouteMatrix(t *testing.T) {
 			name: "Files.Delete", wantMethod: http.MethodDelete, wantPath: "/v1/apps/" + testAppID + "/files",
 			enqueue: func(fake *vertratest.FakeRestClient) { fake.EnqueueJSON(200, `null`) },
 			invoke: func(ctx context.Context, svc AppsService) error {
-				return svc.Files().Delete(ctx, testAppID, ApplicationFileDeleteBody{Path: "main.py"}, opts...)
+				_, err := svc.Files().Delete(ctx, testAppID, ApplicationFileDeleteBody{Path: "main.py"}, opts...)
+				return err
 			},
 		},
 		{
@@ -1323,5 +1324,148 @@ func TestApps_Network_PublishWithPort_SendsPortOnlyWhenSet(t *testing.T) {
 	plain := decodeJSONBody(t, fake.Requests[1])
 	if _, ok := plain["port"]; ok {
 		t.Errorf("Publish sent port = %v, want it omitted", plain["port"])
+	}
+}
+
+func TestApps_Create_AutoRestart(t *testing.T) {
+	on, off := true, false
+	for _, tc := range []struct {
+		name    string
+		value   *bool
+		want    string
+		present bool
+	}{
+		{"on", &on, "true", true},
+		{"off", &off, "false", true},
+		{"omitted", nil, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fake := vertratest.NewFakeRestClient(t)
+			fake.EnqueueJSON(200, `{"id":"1","name":"a"}`)
+			svc := newAppsService(fake)
+			if _, err := svc.Create(context.Background(), ApplicationCreateParams{File: strings.NewReader("zip"), Name: "a", Memory: 256, Main: "index.js", Version: "latest", AutoRestart: tc.value}); err != nil {
+				t.Fatalf("Create: %v", err)
+			}
+			fields, _, _ := parseMultipartRequest(t, fake.Requests[0])
+			got, present := fields["auto_restart"]
+			if present != tc.present || got != tc.want {
+				t.Errorf("auto_restart = %q (present %v), want %q (present %v)", got, present, tc.want, tc.present)
+			}
+		})
+	}
+}
+
+func TestApps_UpdateConfigBody_AutoRestart(t *testing.T) {
+	off := false
+	payload, err := json.Marshal(ApplicationUpdateConfigBody{AutoRestart: &off})
+	if err != nil || string(payload) != `{"auto_restart":false}` {
+		t.Fatalf("payload = %s, err = %v", payload, err)
+	}
+}
+
+func TestApps_Get_DecodesAutoRestart(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"1","name":"a","auto_restart":true}`)
+	got, err := newAppsService(fake).Get(context.Background(), testAppID)
+	if err != nil || !got.AutoRestart {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+}
+
+func TestApps_FilesDelete_DecodesSpaceReleased(t *testing.T) {
+	for _, tc := range []struct{ body, want string }{
+		{`{"space_released":"on_restart"}`, "on_restart"},
+		{`{"space_released":"now"}`, "now"},
+		{`null`, ""},
+	} {
+		fake := vertratest.NewFakeRestClient(t)
+		fake.EnqueueJSON(200, tc.body)
+		got, err := newAppsService(fake).Files().Delete(context.Background(), testAppID, ApplicationFileDeleteBody{Path: "/log.txt"})
+		if err != nil || string(got.SpaceReleased) != tc.want {
+			t.Errorf("body %s: got %q, err %v, want %q", tc.body, got.SpaceReleased, err, tc.want)
+		}
+	}
+}
+
+func TestApps_Realtime_MetricsParamAndLiveMetrics(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	body := "event: next_logs\ndata: building\n\n" +
+		"event: metrics\ndata: {\"at\":\"2026-11-24T10:00:00Z\",\"cpu_percent\":12.5,\"cpu_cores\":0.25,\"memory_bytes\":1048576,\"memory_limit_bytes\":null,\"net_rx_bps\":10,\"net_tx_bps\":20,\"net_rx_bytes\":100,\"net_tx_bytes\":200}\n\n" +
+		"event: metrics\ndata: {\"at\":\"2026-11-24T10:00:05Z\",\"memory_limit_bytes\":2097152}\n\n" +
+		"event: metrics\ndata: not json\n\n"
+	fake.EnqueueSSE(200, body)
+	svc := newAppsService(fake)
+
+	stream, err := svc.Realtime(context.Background(), testAppID, &ApplicationRealtimeParams{Metrics: true})
+	if err != nil {
+		t.Fatalf("Realtime: %v", err)
+	}
+	defer stream.Close()
+
+	if got := fake.Requests[0].Query.Get("metrics"); got != "true" {
+		t.Errorf("metrics query = %q, want true", got)
+	}
+	if _, ok := fake.Requests[0].Query["since"]; ok {
+		t.Errorf("since query present, want omitted")
+	}
+
+	var events []ApplicationRealtimeEvent
+	for stream.Next(context.Background()) {
+		events = append(events, stream.Event())
+	}
+	if len(events) != 4 {
+		t.Fatalf("got %d events, want 4", len(events))
+	}
+	if events[0].Event != ApplicationRealtimeEventTypeNextLogs {
+		t.Errorf("event[0] = %q, want next_logs", events[0].Event)
+	}
+	if _, err := events[0].LiveMetrics(); err == nil {
+		t.Errorf("LiveMetrics on next_logs: want error")
+	}
+
+	m, err := events[1].LiveMetrics()
+	if err != nil {
+		t.Fatalf("LiveMetrics: %v", err)
+	}
+	if m.CPUPercent != 12.5 || m.CPUCores != 0.25 || m.MemoryBytes != 1048576 || m.MemoryLimitBytes != nil ||
+		m.NetRxBps != 10 || m.NetTxBps != 20 || m.NetRxBytes != 100 || m.NetTxBytes != 200 {
+		t.Errorf("metrics = %+v", m)
+	}
+	if m.At.Format(time.RFC3339) != "2026-11-24T10:00:00Z" {
+		t.Errorf("at = %v", m.At)
+	}
+
+	m2, err := events[2].LiveMetrics()
+	if err != nil || m2.MemoryLimitBytes == nil || *m2.MemoryLimitBytes != 2097152 {
+		t.Errorf("metrics with limit = %+v, err %v", m2, err)
+	}
+	if _, err := events[3].LiveMetrics(); err == nil {
+		t.Errorf("LiveMetrics with invalid JSON: want error")
+	}
+}
+
+func TestApps_Metrics_DecodesEvents(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `[{"cpu":1,"ram":2,"storage":3,"date":"2026-11-24T10:00:00Z","network":[1,2],"events":[{"at":"2026-11-24T10:01:00Z","kind":"crash","out_of_memory":true},{"at":"2026-11-24T10:02:00Z","kind":"auto_restart","out_of_memory":false},{"at":"2026-11-24T10:03:00Z","kind":"restart","out_of_memory":false}]},{"cpu":1,"ram":2,"storage":3,"date":"2026-11-24T10:05:00Z","network":[1,2],"events":[]}]`)
+	svc := newAppsService(fake)
+
+	got, err := svc.Metrics(context.Background(), testAppID, nil)
+	if err != nil {
+		t.Fatalf("Metrics: %v", err)
+	}
+	if len(got) != 2 || len(got[0].Events) != 3 || len(got[1].Events) != 0 {
+		t.Fatalf("metrics = %+v", got)
+	}
+	want := []MetricEventKind{MetricEventKindCrash, MetricEventKindAutoRestart, MetricEventKindRestart}
+	for i, kind := range want {
+		if got[0].Events[i].Kind != kind {
+			t.Errorf("events[%d].Kind = %q, want %q", i, got[0].Events[i].Kind, kind)
+		}
+	}
+	if !got[0].Events[0].OutOfMemory || got[0].Events[1].OutOfMemory {
+		t.Errorf("out_of_memory = %v, %v", got[0].Events[0].OutOfMemory, got[0].Events[1].OutOfMemory)
+	}
+	if got[0].Events[0].At.Format(time.RFC3339) != "2026-11-24T10:01:00Z" {
+		t.Errorf("at = %v", got[0].Events[0].At)
 	}
 }

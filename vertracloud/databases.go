@@ -112,6 +112,10 @@ type Database struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 	LastSnapshot *time.Time `json:"last_snapshot"`
 	OfflineSince *time.Time `json:"offline_since"`
+	// LegacyHost is true when the database still answers on the old address; see DatabaseCertificateReset.
+	LegacyHost bool `json:"legacy_host"`
+	// Password is set only by Databases.Create, which is the one time it is shown; every other route leaves it empty.
+	Password string `json:"password,omitempty"`
 	// Version is the engine major line (e.g. "18", "8.0"); the patch is never
 	// exposed. It is not limited to the catalog: older databases may report a
 	// line that is no longer offered for new ones.
@@ -193,13 +197,26 @@ type DatabaseMetric struct {
 	Storage float64   `json:"storage"`
 	Date    time.Time `json:"date"`
 	Network []float64 `json:"network"`
+	// Events are the events between this point's Date and the next one's (up to
+	// now in the last point); empty when nothing happened.
+	Events []MetricEvent `json:"events"`
 }
 
 // DatabaseCertificateReset is the new certificate after a reset, with the
-// applications of stacks connected to the database that must restart to read it.
+// applications of stacks connected to the database that must restart to read it,
+// the Host it was issued for and the variables of applications that still hold
+// the old address (empty when the address does not change).
 type DatabaseCertificateReset struct {
 	DatabaseCertificate
 	RestartNotice
+	Host                       string                              `json:"host"`
+	ClientVariablesWithOldHost []DatabaseClientVariableWithOldHost `json:"client_variables_with_old_host"`
+}
+
+// DatabaseClientVariableWithOldHost is an environment variable of an application that connects to the database.
+type DatabaseClientVariableWithOldHost struct {
+	AppID string `json:"app_id"`
+	Key   string `json:"key"`
 }
 
 // DatabasePasswordReset is the new password after a reset, with the
@@ -387,7 +404,10 @@ type DatabasesCredentialsCertificateService interface {
 	Get(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificate, error)
 	// Reset: POST /v1/databases/:id/credentials/certificate/reset — scope
 	// databases:credentials. The answer says which applications of stacks
-	// connected to the database must restart to read the new certificate.
+	// connected to the database must restart to read the new certificate. On a
+	// database with LegacyHost the new certificate moves it to the current
+	// address, which is done only from the dashboard: with an API key the call
+	// fails with 403 WEBSITE_ONLY.
 	Reset(ctx context.Context, id string, opts ...rest.RequestOpt) (DatabaseCertificateReset, error)
 }
 

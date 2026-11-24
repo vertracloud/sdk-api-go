@@ -96,6 +96,8 @@ db, err := client.Databases.Create(ctx, vertracloud.DatabaseCreateBody{
 fmt.Println(db.Version) // major line, e.g. "18"
 ```
 
+`db.Password` is filled only by `Databases.Create` (and `StackDatabaseAdded.Password` when a database is added to a stack): it is the one time the password is shown, so store it right away. `Credentials().Password().Reset` issues a new one. `db.LegacyHost` is true while the database still answers on the old address; moving it to the current address (`Credentials().Certificate().Reset`) is done only from the dashboard, and with an API key that call fails with 403 `WEBSITE_ONLY`. On a database that is not `LegacyHost`, `Reset` answers with the `Host` and the `ClientVariablesWithOldHost` of applications that still hold the old address (empty when the address does not change).
+
 Omit `Version` to get the recommended one; with `SnapshotID`, leave it empty to keep the snapshot's line (an older one fails with `SNAPSHOT_VERSION_NEWER`, an unknown one with `INVALID_DATABASE_VERSION`). A database's version cannot be changed after creation; security updates are applied when it is stopped and started.
 
 ### Per-call options
@@ -126,7 +128,9 @@ if _, err := client.Databases.Reset(ctx, dbID); err != nil {
 }
 ```
 
-`Apps.Delete` returns only an error, `Databases.Delete` returns the database id and `Databases.Reset` returns the operation status.
+`Apps.Delete` returns only an error, `Databases.Delete` returns the database id and `Databases.Reset` returns the operation status. `Apps.Files().Delete` returns `ApplicationFileDeleteResponse`: `SpaceReleased` is `ApplicationFileSpaceReleasedNow` or `ApplicationFileSpaceReleasedOnRestart` (empty from an API that does not report it). This changes the method signature, so a mock of `AppsFilesService` must return the new value.
+
+`ApplicationCreateParams.AutoRestart` and `ApplicationUpdateConfigBody.AutoRestart` (`*bool`) set whether the platform restarts an application after a crash; `nil` leaves the value alone, and `Application.AutoRestart` reads it.
 
 Snapshots are limited by the plan's quota per account and by an interval per resource (the numbers are in the [knowledge base](https://docs.vertracloud.app/knowledge-base)); requests that come too fast get a plain `429 RATE_LIMIT_EXCEEDED`. Past a snapshot limit the API answers `429 SNAPSHOT_RATE_LIMITED`; read it with `vertracloud.SnapshotRateLimitDetails(err)` (`Scope`, `RetryAfter`, `ResetsAt`). Other snapshot errors are `ErrCodeDatabaseNotReady`, `ErrCodeSnapshotFailed`, `ErrCodeSnapshotTimeout`, `ErrCodeSnapshotTooLarge` (`SnapshotTooLargeMaxBytes`), `ErrCodeRestoreCooldown` (`RestoreCooldownRetryAfter`), `ErrCodeRestoreInProgress`, `ErrCodeSnapshotExceedsStorage`, `ErrCodeSnapshotCorrupted`, `ErrCodeSnapshotImportFailed`, `ErrCodeSnapshotEngineMismatch`, `ErrCodeSnapshotVersionNewer`, `ErrCodeStackRestoreMemberFailed`, `ErrCodeAppBuilding` and `ErrCodeOperationInProgress`. Each snapshot has an `Origin`: `manual` or `automatic`.
 
@@ -144,6 +148,7 @@ yes := true
 _, err = client.Apps.Restart(ctx, appID, &vertracloud.ApplicationRestartBody{ReinstallDependencies: &yes})
 
 metrics, err := client.Apps.Metrics(ctx, appID, &vertracloud.ApplicationMetricsParams{Range: "24h"})
+// each point lists its Events (restart, auto_restart, crash, with OutOfMemory); Databases.Metrics does the same
 logs, err := client.Apps.Logs(ctx, appID)
 
 // Releases and rollback
@@ -342,6 +347,21 @@ if err := stream.Err(); err != nil {
 }
 ```
 
+Event types: `logs` (current version), `next_logs` (output of the new version while a zero-downtime deploy prepares it), `system` (notes, such as `install_note:build_oom` or `deploy_note:discarded:<release_id>:<reason>`; notes resent at the start of the connection carry an `<ISO 8601> ` prefix), `metrics` and `heartbeat`. Ignore types you do not know.
+
+To receive live CPU, memory and network readings (about every 5 s), open the stream with `Metrics: true` and decode each `metrics` event:
+
+```go
+stream, err := client.Apps.Realtime(ctx, appID, &vertracloud.ApplicationRealtimeParams{Metrics: true})
+// ...
+if ev := stream.Event(); ev.Event == vertracloud.ApplicationRealtimeEventTypeMetrics {
+	m, err := ev.LiveMetrics() // *vertracloud.ApplicationLiveMetrics
+	if err == nil {
+		fmt.Printf("cpu %.1f%% mem %.0f B\n", m.CPUPercent, m.MemoryBytes)
+	}
+}
+```
+
 Stop the stream by cancelling `ctx`. Pass `rest.WithIdleTimeout(d)` to also stop when no event arrives within `d`, and `&vertracloud.ApplicationRealtimeParams{Since: cursor}` to resume. There is no automatic reconnection.
 
 ### Custom Docker images
@@ -437,7 +457,7 @@ for stream.Next(ctx) {
 job, err = client.Templates.Deploys().Get(ctx, job.ID) // outputs are read here, never on the stream
 ```
 
-Outputs marked `Once` come back on the first read of a finished job and are empty afterwards. The public catalog (`List`, `Get`, `Categories`, `Versions`) also works with `rest.NewPublicClient`.
+Outputs marked `Once` and `DatabasePasswords` (the passwords of the databases the job created) come back on the first read of a finished job and are empty afterwards. The public catalog (`List`, `Get`, `Categories`, `Versions`) also works with `rest.NewPublicClient`.
 
 Private templates: `Create` and `NewVersion` take the manifest and one ZIP per service that runs code (`Sources`); `FromApp` and `FromStack` save what you already run (read `AppDraft` / `StackDraft` first to review the variables). `ShareLinks()` creates, lists and revokes links; `Share()` previews, uses, copies or reports what a link gives. `Updates()` reads and runs the update of an app or stack that came from a template, and detaches it. `Validate` checks a manifest without creating anything; the findings of a refused one are in `vertracloud.TemplateManifestIssues(err)`.
 

@@ -741,6 +741,18 @@ func TestApps_CreateFromImage_Body(t *testing.T) {
 	}
 }
 
+func TestApps_CreateFromImage_AutoRestart(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(202, `{"id":"app_3","name":"bot","status":"building","custom_image":null}`)
+	off := false
+	if _, err := newAppsService(fake).CreateFromImage(context.Background(), ApplicationCreateFromImageParams{ImageID: testImageID, Name: "bot", Memory: 256, AutoRestart: &off}); err != nil {
+		t.Fatalf("CreateFromImage: %v", err)
+	}
+	if body := decodeJSONBody(t, fake.Requests[0]); body["auto_restart"] != false {
+		t.Errorf("auto_restart = %#v, want false", body["auto_restart"])
+	}
+}
+
 // TestApps_CreateFromImage_OmitsOptionalFields checks that web: false still
 // sends "web" and that unset optional fields are left out of the body.
 func TestApps_CreateFromImage_OmitsOptionalFields(t *testing.T) {

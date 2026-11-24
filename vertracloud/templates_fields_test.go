@@ -157,7 +157,7 @@ func TestConfirmDetach_FilesAndWebhook(t *testing.T) {
 	if err := apps.Files().Move(ctx, "a", ApplicationFileMoveBody{Path: "/a", To: "/b", ConfirmDetach: true}); err != nil {
 		t.Fatal(err)
 	}
-	if err := apps.Files().Delete(ctx, "a", ApplicationFileDeleteBody{Path: "/a"}); err != nil {
+	if _, err := apps.Files().Delete(ctx, "a", ApplicationFileDeleteBody{Path: "/a"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := apps.Files().Upload(ctx, "a", ApplicationFileUploadParams{File: strings.NewReader("z"), FileName: "a.zip", ConfirmDetach: true}); err != nil {
@@ -193,7 +193,7 @@ func TestConfirmDetach_UploadOmitsQueryWhenFalse(t *testing.T) {
 func TestConfirmDetach_Error409(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueError(409, `{"code":"TEMPLATE_DETACH_CONFIRMATION_REQUIRED","details":{"action":"commit"}}`)
-	err := newAppsService(fake).Files().Delete(context.Background(), "a", ApplicationFileDeleteBody{Path: "/a"})
+	_, err := newAppsService(fake).Files().Delete(context.Background(), "a", ApplicationFileDeleteBody{Path: "/a"})
 	action, ok := TemplateDetachConfirmation(err)
 	if !ok || action != TemplateDetachConfirmationActionCommit {
 		t.Fatalf("action = %q ok = %v err = %v", action, ok, err)

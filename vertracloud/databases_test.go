@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/vertracloud/sdk-api-go/internal/vertratest"
@@ -364,5 +365,53 @@ func TestDatabases_Create_SnapshotID_NoWorkspace(t *testing.T) {
 		if _, ok := body[absent]; ok {
 			t.Errorf("body has %q = %v, want absent", absent, body[absent])
 		}
+	}
+}
+
+func TestDatabases_Create_DecodesThePasswordSentOnce(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(201, `{"id":"db-1","legacy_host":false,"password":"pw-once"}`)
+	got, err := newDatabasesService(fake).Create(context.Background(), DatabaseCreateBody{Name: "x", RAM: 512})
+	if err != nil || got.Password != "pw-once" || got.LegacyHost {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+}
+
+func TestDatabases_Get_DecodesLegacyHostWithoutPassword(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"db-1","legacy_host":true}`)
+	got, err := newDatabasesService(fake).Get(context.Background(), testDBID)
+	if err != nil || !got.LegacyHost || got.Password != "" {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+	encoded, _ := json.Marshal(got)
+	if strings.Contains(string(encoded), "password") {
+		t.Errorf("password serialized: %s", encoded)
+	}
+}
+
+func TestDatabases_CertificateReset_DecodesHostAndOldHostVariables(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"crt":"c","key":"k","pem":"p","restart_required":true,"apps_to_restart":["a1"],"host":"vertra-cloud-x.db.ny1.example","client_variables_with_old_host":[{"app_id":"a1","key":"DATABASE_URL"}]}`)
+	got, err := newDatabasesService(fake).Credentials().Certificate().Reset(context.Background(), testDBID)
+	if err != nil || got.Host != "vertra-cloud-x.db.ny1.example" || len(got.ClientVariablesWithOldHost) != 1 || got.ClientVariablesWithOldHost[0].Key != "DATABASE_URL" {
+		t.Fatalf("got %+v, err %v", got, err)
+	}
+}
+
+func TestDatabases_Metrics_DecodesEvents(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `[{"cpu":1,"ram":2,"storage":3,"date":"2026-11-24T10:00:00Z","network":[1,2],"events":[{"at":"2026-11-24T10:01:00Z","kind":"crash","out_of_memory":true}]}]`)
+	svc := newDatabasesService(fake)
+
+	got, err := svc.Metrics(context.Background(), testDBID)
+	if err != nil {
+		t.Fatalf("Metrics: %v", err)
+	}
+	if len(got) != 1 || len(got[0].Events) != 1 {
+		t.Fatalf("metrics = %+v", got)
+	}
+	if ev := got[0].Events[0]; ev.Kind != MetricEventKindCrash || !ev.OutOfMemory {
+		t.Errorf("event = %+v", ev)
 	}
 }

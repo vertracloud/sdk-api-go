@@ -426,6 +426,8 @@ type StackDatabaseAdded struct {
 	RestartNotice
 	Stack      Stack  `json:"stack"`
 	DatabaseID string `json:"database_id"`
+	// Password is the password of the new database; it is shown only in this answer.
+	Password string `json:"password"`
 }
 
 // StackBlobAdded is the result of adding a Blob folder to a stack.

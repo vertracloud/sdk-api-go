@@ -7,6 +7,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -659,5 +660,30 @@ func TestTemplates_ApplicationTemplateLockedDeploySettings(t *testing.T) {
 	}
 	if len(got.LockedDeploySettings) != 1 || got.LockedDeploySettings[0] != "zero_downtime" {
 		t.Fatalf("locked_deploy_settings = %v", got.LockedDeploySettings)
+	}
+}
+
+func TestDeployGetDecodesDatabasePasswords(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"dep_1","kind":"deploy","status":"succeeded","steps":[],"outputs":[],"database_passwords":[{"database_id":"d1","service_id":"db","password":"s3cret"}]}`)
+	job, err := newTemplatesService(fake).Deploys().Get(context.Background(), "dep_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []TemplateDeployDatabasePassword{{DatabaseID: "d1", ServiceID: "db", Password: "s3cret"}}
+	if !reflect.DeepEqual(job.DatabasePasswords, want) {
+		t.Fatalf("database_passwords = %+v", job.DatabasePasswords)
+	}
+}
+
+func TestDeployGetWithoutDatabasePasswordsIsEmpty(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(200, `{"id":"dep_1","kind":"deploy","status":"succeeded","steps":[],"outputs":[],"database_passwords":[]}`)
+	job, err := newTemplatesService(fake).Deploys().Get(context.Background(), "dep_1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(job.DatabasePasswords) != 0 {
+		t.Fatalf("database_passwords = %+v", job.DatabasePasswords)
 	}
 }

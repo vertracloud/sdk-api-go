@@ -36,7 +36,9 @@ type AppsService interface {
 	// route in the catalog; params may be nil. There is no automatic
 	// reconnection — the stream ends when the connection closes or
 	// EventStream.Close is called. Pass rest.WithIdleTimeout in opts to fail
-	// EventStream.Next when no event arrives within a window.
+	// EventStream.Next when no event arrives within a window. "metrics"
+	// events only come when params.Metrics is true; decode them with
+	// ApplicationRealtimeEvent.LiveMetrics. Ignore event types you do not know.
 	Realtime(ctx context.Context, id string, params *ApplicationRealtimeParams, opts ...rest.RequestOpt) (*ApplicationRealtimeEventStream, error)
 	// Metrics: GET /v1/apps/:id/metrics — scope apps:read. params may be nil.
 	Metrics(ctx context.Context, id string, params *ApplicationMetricsParams, opts ...rest.RequestOpt) ([]ApplicationMetric, error)
@@ -102,6 +104,8 @@ type AppsService interface {
 type ApplicationRealtimeParams struct {
 	// Since resumes the stream after this Unix ms cursor; 0 omits it.
 	Since int64
+	// Metrics adds "metrics" events with the live CPU, memory and network reading.
+	Metrics bool
 }
 
 // ApplicationMetricsParams are the optional parameters of AppsService.Metrics.
@@ -117,7 +121,9 @@ type ApplicationRealtimeEventType string
 
 const (
 	ApplicationRealtimeEventTypeLogs      ApplicationRealtimeEventType = "logs"
+	ApplicationRealtimeEventTypeNextLogs  ApplicationRealtimeEventType = "next_logs"
 	ApplicationRealtimeEventTypeSystem    ApplicationRealtimeEventType = "system"
+	ApplicationRealtimeEventTypeMetrics   ApplicationRealtimeEventType = "metrics"
 	ApplicationRealtimeEventTypeHeartbeat ApplicationRealtimeEventType = "heartbeat"
 )
 
@@ -125,6 +131,36 @@ type ApplicationRealtimeEvent struct {
 	Event ApplicationRealtimeEventType
 	Data  string
 	ID    string
+}
+
+// LiveMetrics decodes the Data of a "metrics" event.
+func (e ApplicationRealtimeEvent) LiveMetrics() (*ApplicationLiveMetrics, error) {
+	if e.Event != ApplicationRealtimeEventTypeMetrics {
+		return nil, fmt.Errorf("vertracloud: realtime event %q is not a metrics event", e.Event)
+	}
+	var m ApplicationLiveMetrics
+	if err := json.Unmarshal([]byte(e.Data), &m); err != nil {
+		return nil, fmt.Errorf("vertracloud: decode live metrics: %w", err)
+	}
+	return &m, nil
+}
+
+// ApplicationLiveMetrics is the reading carried by a "metrics" realtime event,
+// sent about every 5 seconds while the application runs. Rates are measured
+// between two consecutive readings.
+type ApplicationLiveMetrics struct {
+	At time.Time `json:"at"`
+	// CPUPercent is the CPU in use as a percentage of the plan's CPU, 0 to 100.
+	CPUPercent float64 `json:"cpu_percent"`
+	// CPUCores is the CPU in use, in cores.
+	CPUCores    float64 `json:"cpu_cores"`
+	MemoryBytes float64 `json:"memory_bytes"`
+	// MemoryLimitBytes is nil when the application has no memory limit.
+	MemoryLimitBytes *float64 `json:"memory_limit_bytes"`
+	NetRxBps         float64  `json:"net_rx_bps"`
+	NetTxBps         float64  `json:"net_tx_bps"`
+	NetRxBytes       float64  `json:"net_rx_bytes"`
+	NetTxBytes       float64  `json:"net_tx_bytes"`
 }
 
 type ApplicationRealtimeEventStream struct{ *rest.EventStream }
@@ -317,6 +353,8 @@ type Application struct {
 	ShieldCooldown *ApplicationShieldCooldown `json:"shield_cooldown"`
 	// Deploy is the deploy behavior: zero downtime, automatic rollback and health check.
 	Deploy ApplicationDeploySettings `json:"deploy"`
+	// AutoRestart is whether the platform restarts the application by itself after a crash.
+	AutoRestart bool `json:"auto_restart"`
 	// LastBuildError is the code of the last build or install failure; nil after a
 	// successful build. The detail is in the app log.
 	LastBuildError *ApplicationBuildError `json:"last_build_error"`
@@ -352,6 +390,9 @@ const (
 	ApplicationBuildErrorInstallOutOfMemory   ApplicationBuildError = "INSTALL_OUT_OF_MEMORY"
 	ApplicationBuildErrorInstallTimeout       ApplicationBuildError = "INSTALL_TIMEOUT"
 	ApplicationBuildErrorInstallShieldBlocked ApplicationBuildError = "INSTALL_SHIELD_BLOCKED"
+	ApplicationBuildErrorImageVolumeRefused   ApplicationBuildError = "IMAGE_VOLUME_REFUSED"
+	ApplicationBuildErrorImageLabelRefused    ApplicationBuildError = "IMAGE_LABEL_REFUSED"
+	ApplicationBuildErrorImagePullFailed      ApplicationBuildError = "IMAGE_PULL_FAILED"
 )
 
 // ApplicationDeploySettings is the deploy behavior of an application. Change
@@ -410,12 +451,37 @@ type ApplicationStatusShort struct {
 	RestoreJobID *string `json:"restore_job_id"`
 }
 
+// MetricEventKind is what happened to an application or database between two
+// metric points.
+type MetricEventKind string
+
+const (
+	// MetricEventKindRestart is a restart requested by the user.
+	MetricEventKindRestart MetricEventKind = "restart"
+	// MetricEventKindAutoRestart is the platform starting the resource again after a failure.
+	MetricEventKindAutoRestart MetricEventKind = "auto_restart"
+	// MetricEventKindCrash is a failure after which the resource stayed stopped.
+	MetricEventKindCrash MetricEventKind = "crash"
+)
+
+// MetricEvent is an event shown on the metric charts, with its exact time.
+type MetricEvent struct {
+	At   time.Time       `json:"at"`
+	Kind MetricEventKind `json:"kind"`
+	// OutOfMemory is true when the failure came from running out of memory;
+	// always false for MetricEventKindRestart.
+	OutOfMemory bool `json:"out_of_memory"`
+}
+
 type ApplicationMetric struct {
 	CPU     float64   `json:"cpu"`
 	RAM     float64   `json:"ram"`
 	Storage float64   `json:"storage"`
 	Date    time.Time `json:"date"`
 	Network []float64 `json:"network"`
+	// Events are the events between this point's Date and the next one's (up to
+	// now in the last point); empty when nothing happened.
+	Events []MetricEvent `json:"events"`
 }
 
 type ApplicationFile struct {
@@ -735,6 +801,8 @@ type ApplicationCreateParams struct {
 	// Subdomain: "random" (or empty) lets the platform pick one.
 	Subdomain string
 	Envs      []ApplicationEnvironmentInput
+	// AutoRestart sets whether the platform restarts the application after a crash; nil leaves the platform default.
+	AutoRestart *bool
 }
 
 // ApplicationRestartBody is the optional body of POST /v1/apps/:id/restart.
@@ -761,6 +829,8 @@ type ApplicationUpdateConfigBody struct {
 	BuildCommand *Nullable[string]    `json:"build_command,omitempty"`
 	RAM          *int                 `json:"ram,omitempty"`
 	Language     *ApplicationLanguage `json:"language,omitempty"`
+	// AutoRestart sets whether the platform restarts the application after a crash; nil leaves it untouched.
+	AutoRestart *bool `json:"auto_restart,omitempty"`
 	// Deploy changes the deploy behavior; nil leaves it untouched.
 	// ZeroDowntime "on" needs PlanFeatures.ZeroDowntime and AutoRollback true
 	// needs PlanFeatures.AutoRollback; without them the call fails with 403
@@ -832,6 +902,22 @@ type ApplicationFileDeleteBody struct {
 	Path string `json:"path"`
 	// ConfirmDetach: see ApplicationFileWriteBody.ConfirmDetach.
 	ConfirmDetach bool `json:"confirm_detach,omitempty"`
+}
+
+// ApplicationFileSpaceReleased says when the disk space of a deleted file is given back.
+type ApplicationFileSpaceReleased string
+
+const (
+	// ApplicationFileSpaceReleasedNow: the space is free as soon as the call returns.
+	ApplicationFileSpaceReleasedNow ApplicationFileSpaceReleased = "now"
+	// ApplicationFileSpaceReleasedOnRestart: the space is free only after the application restarts.
+	ApplicationFileSpaceReleasedOnRestart ApplicationFileSpaceReleased = "on_restart"
+)
+
+// ApplicationFileDeleteResponse is the answer of DELETE /v1/apps/:id/files.
+// SpaceReleased is empty when the API does not report it.
+type ApplicationFileDeleteResponse struct {
+	SpaceReleased ApplicationFileSpaceReleased `json:"space_released"`
 }
 
 // ApplicationFileMoveBody is the body of PATCH /v1/apps/:id/files.
@@ -961,6 +1047,9 @@ func (s *appsServiceImpl) Realtime(ctx context.Context, id string, params *Appli
 	if params != nil && params.Since != 0 {
 		q.Set("since", strconv.FormatInt(params.Since, 10))
 	}
+	if params != nil && params.Metrics {
+		q.Set("metrics", "true")
+	}
 	stream, err := rest.OpenEventStream(ctx, s.rest, appPath(id, "/realtime"), q, opts...)
 	if err != nil {
 		return nil, err
@@ -1060,6 +1149,9 @@ func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreatePa
 			return Application{}, fmt.Errorf("vertracloud: encode envs: %w", err)
 		}
 		fields = append(fields, multipartField{Name: "envs", Value: string(b)})
+	}
+	if params.AutoRestart != nil {
+		fields = append(fields, multipartField{Name: "auto_restart", Value: strconv.FormatBool(*params.AutoRestart)})
 	}
 
 	body, contentType := newMultipartBody(fields)
@@ -1431,8 +1523,8 @@ type AppsFilesService interface {
 	// Move: PATCH /v1/apps/:id/files — scope apps:files. Renames/moves
 	// body.Path to body.To.
 	Move(ctx context.Context, id string, body ApplicationFileMoveBody, opts ...rest.RequestOpt) error
-	// Delete: DELETE /v1/apps/:id/files — scope apps:files.
-	Delete(ctx context.Context, id string, body ApplicationFileDeleteBody, opts ...rest.RequestOpt) error
+	// Delete: DELETE /v1/apps/:id/files — scope apps:files. The answer says when the space of the file is released.
+	Delete(ctx context.Context, id string, body ApplicationFileDeleteBody, opts ...rest.RequestOpt) (ApplicationFileDeleteResponse, error)
 	// Upload: POST /v1/apps/:id/files/upload — scope apps:files.
 	// multipart/form-data, streamed from params.File.
 	Upload(ctx context.Context, id string, params ApplicationFileUploadParams, opts ...rest.RequestOpt) (ApplicationFileUploadResponse, error)
@@ -1526,13 +1618,16 @@ func (f *appsFilesServiceImpl) Move(ctx context.Context, id string, body Applica
 	return err
 }
 
-func (f *appsFilesServiceImpl) Delete(ctx context.Context, id string, body ApplicationFileDeleteBody, opts ...rest.RequestOpt) error {
+func (f *appsFilesServiceImpl) Delete(ctx context.Context, id string, body ApplicationFileDeleteBody, opts ...rest.RequestOpt) (ApplicationFileDeleteResponse, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return fmt.Errorf("vertracloud: encode request body: %w", err)
+		return ApplicationFileDeleteResponse{}, fmt.Errorf("vertracloud: encode request body: %w", err)
 	}
-	_, err = f.rest.Do(ctx, http.MethodDelete, appPath(id, "/files"), nil, bytes.NewReader(payload), "application/json", opts...)
-	return err
+	data, err := f.rest.Do(ctx, http.MethodDelete, appPath(id, "/files"), nil, bytes.NewReader(payload), "application/json", opts...)
+	if err != nil {
+		return ApplicationFileDeleteResponse{}, err
+	}
+	return rest.DecodeJSON[ApplicationFileDeleteResponse](data)
 }
 
 func (f *appsFilesServiceImpl) Upload(ctx context.Context, id string, params ApplicationFileUploadParams, opts ...rest.RequestOpt) (ApplicationFileUploadResponse, error) {

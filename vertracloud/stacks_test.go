@@ -537,3 +537,12 @@ func TestStacks_SnapshotsRestoreAndWaitDoesNotPollAfterARefusal(t *testing.T) {
 		t.Fatalf("err = %v, requests = %d", err, len(fake.Requests))
 	}
 }
+
+func TestStacks_AddDatabase_DecodesThePasswordSentOnce(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	fake.EnqueueJSON(201, `{"stack":`+stackJSON+`,"database_id":"db_9","password":"pw-once","restart_required":false,"apps_to_restart":[]}`)
+	added, err := newStacksService(fake).AddDatabase(context.Background(), "stk_1", StackDatabaseBody{Type: DatabaseTypePostgreSQL, Name: "pg", RAM: 256})
+	if err != nil || added.Password != "pw-once" {
+		t.Fatalf("added = %+v, err %v", added, err)
+	}
+}

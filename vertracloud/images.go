@@ -414,6 +414,8 @@ type ApplicationCreateFromImageParams struct {
 	Envs []ApplicationEnvironmentInput `json:"envs,omitempty"`
 	// WorkspaceID associates the app with a workspace when set.
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	// AutoRestart turns the platform restart after a crash on or off. Nil keeps the default (on).
+	AutoRestart *bool `json:"auto_restart,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

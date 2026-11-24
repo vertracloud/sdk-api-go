@@ -988,6 +988,12 @@ func (o TemplateDeployOutput) Text() (string, bool) {
 	return s, true
 }
 
+type TemplateDeployDatabasePassword struct {
+	DatabaseID string `json:"database_id"`
+	ServiceID  string `json:"service_id"`
+	Password   string `json:"password"`
+}
+
 // TemplateDeploy is a deploy or update job.
 type TemplateDeploy struct {
 	ID         string               `json:"id"`
@@ -1005,11 +1011,12 @@ type TemplateDeploy struct {
 	// StackID is the stack of a template with more than one service; nil otherwise.
 	StackID *string `json:"stack_id"`
 	// ApplicationID is the application of a template with a single application service; nil otherwise.
-	ApplicationID *string                `json:"application_id"`
-	Outputs       []TemplateDeployOutput `json:"outputs"`
-	CreatedAt     time.Time              `json:"created_at"`
-	UpdatedAt     time.Time              `json:"updated_at"`
-	FinishedAt    *time.Time             `json:"finished_at"`
+	ApplicationID     *string                          `json:"application_id"`
+	Outputs           []TemplateDeployOutput           `json:"outputs"`
+	DatabasePasswords []TemplateDeployDatabasePassword `json:"database_passwords"`
+	CreatedAt         time.Time                        `json:"created_at"`
+	UpdatedAt         time.Time                        `json:"updated_at"`
+	FinishedAt        *time.Time                       `json:"finished_at"`
 }
 
 // TemplateDeployEvent is one event of the progress stream of a job. It never
