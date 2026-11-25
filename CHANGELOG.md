@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.5](https://github.com/vertracloud/sdk-api-go/compare/v0.4.4...v0.4.5) (2026-11-25)
+
+
+### Features
+
+* add next_metrics realtime event type ([d37c4d0](https://github.com/vertracloud/sdk-api-go/commit/d37c4d07df2a267e45d7e18a8a64d7db4656acf3))
+
 ## [0.4.4](https://github.com/vertracloud/sdk-api-go/compare/v0.4.3...v0.4.4) (2026-11-24)
 
 
