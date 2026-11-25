@@ -347,14 +347,14 @@ if err := stream.Err(); err != nil {
 }
 ```
 
-Event types: `logs` (current version), `next_logs` (output of the new version while a zero-downtime deploy prepares it), `system` (notes, such as `install_note:build_oom` or `deploy_note:discarded:<release_id>:<reason>`; notes resent at the start of the connection carry an `<ISO 8601> ` prefix), `metrics` and `heartbeat`. Ignore types you do not know.
+Event types: `logs` (current version), `next_logs` (output of the new version while a zero-downtime deploy prepares it), `system` (notes, such as `install_note:build_oom` or `deploy_note:discarded:<release_id>:<reason>`; notes resent at the start of the connection carry an `<ISO 8601> ` prefix), `metrics`, `next_metrics` (the same readings for the new version during a zero-downtime deploy, until it takes over or the deploy is discarded) and `heartbeat`. Ignore types you do not know.
 
-To receive live CPU, memory and network readings (about every 5 s), open the stream with `Metrics: true` and decode each `metrics` event:
+To receive live CPU, memory and network readings (about every 5 s), open the stream with `Metrics: true` and decode each `metrics` or `next_metrics` event:
 
 ```go
 stream, err := client.Apps.Realtime(ctx, appID, &vertracloud.ApplicationRealtimeParams{Metrics: true})
 // ...
-if ev := stream.Event(); ev.Event == vertracloud.ApplicationRealtimeEventTypeMetrics {
+if ev := stream.Event(); ev.Event == vertracloud.ApplicationRealtimeEventTypeMetrics || ev.Event == vertracloud.ApplicationRealtimeEventTypeNextMetrics {
 	m, err := ev.LiveMetrics() // *vertracloud.ApplicationLiveMetrics
 	if err == nil {
 		fmt.Printf("cpu %.1f%% mem %.0f B\n", m.CPUPercent, m.MemoryBytes)

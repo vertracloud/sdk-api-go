@@ -1444,6 +1444,43 @@ func TestApps_Realtime_MetricsParamAndLiveMetrics(t *testing.T) {
 	}
 }
 
+func TestApps_Realtime_NextMetricsDecodesLikeMetrics(t *testing.T) {
+	fake := vertratest.NewFakeRestClient(t)
+	body := "event: next_metrics\ndata: {\"at\":\"2026-11-24T10:00:00Z\",\"cpu_percent\":3.5,\"cpu_cores\":0.1,\"memory_bytes\":4096,\"memory_limit_bytes\":8192,\"net_rx_bps\":1,\"net_tx_bps\":2,\"net_rx_bytes\":3,\"net_tx_bytes\":4}\n\n" +
+		"event: next_metrics\ndata: not json\n\n"
+	fake.EnqueueSSE(200, body)
+	svc := newAppsService(fake)
+
+	stream, err := svc.Realtime(context.Background(), testAppID, &ApplicationRealtimeParams{Metrics: true})
+	if err != nil {
+		t.Fatalf("Realtime: %v", err)
+	}
+	defer stream.Close()
+
+	var events []ApplicationRealtimeEvent
+	for stream.Next(context.Background()) {
+		events = append(events, stream.Event())
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2", len(events))
+	}
+	if events[0].Event != ApplicationRealtimeEventTypeNextMetrics {
+		t.Fatalf("event[0] = %q, want next_metrics", events[0].Event)
+	}
+
+	m, err := events[0].LiveMetrics()
+	if err != nil {
+		t.Fatalf("LiveMetrics on next_metrics: %v", err)
+	}
+	if m.CPUPercent != 3.5 || m.CPUCores != 0.1 || m.MemoryBytes != 4096 || m.MemoryLimitBytes == nil ||
+		*m.MemoryLimitBytes != 8192 || m.NetRxBps != 1 || m.NetTxBps != 2 || m.NetRxBytes != 3 || m.NetTxBytes != 4 {
+		t.Errorf("next_metrics = %+v", m)
+	}
+	if _, err := events[1].LiveMetrics(); err == nil {
+		t.Errorf("LiveMetrics on next_metrics with invalid JSON: want error")
+	}
+}
+
 func TestApps_Metrics_DecodesEvents(t *testing.T) {
 	fake := vertratest.NewFakeRestClient(t)
 	fake.EnqueueJSON(200, `[{"cpu":1,"ram":2,"storage":3,"date":"2026-11-24T10:00:00Z","network":[1,2],"events":[{"at":"2026-11-24T10:01:00Z","kind":"crash","out_of_memory":true},{"at":"2026-11-24T10:02:00Z","kind":"auto_restart","out_of_memory":false},{"at":"2026-11-24T10:03:00Z","kind":"restart","out_of_memory":false}]},{"cpu":1,"ram":2,"storage":3,"date":"2026-11-24T10:05:00Z","network":[1,2],"events":[]}]`)

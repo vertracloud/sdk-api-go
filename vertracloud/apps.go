@@ -36,9 +36,10 @@ type AppsService interface {
 	// route in the catalog; params may be nil. There is no automatic
 	// reconnection — the stream ends when the connection closes or
 	// EventStream.Close is called. Pass rest.WithIdleTimeout in opts to fail
-	// EventStream.Next when no event arrives within a window. "metrics"
-	// events only come when params.Metrics is true; decode them with
-	// ApplicationRealtimeEvent.LiveMetrics. Ignore event types you do not know.
+	// EventStream.Next when no event arrives within a window. "metrics" and
+	// "next_metrics" events only come when params.Metrics is true; decode
+	// them with ApplicationRealtimeEvent.LiveMetrics. Ignore event types you
+	// do not know.
 	Realtime(ctx context.Context, id string, params *ApplicationRealtimeParams, opts ...rest.RequestOpt) (*ApplicationRealtimeEventStream, error)
 	// Metrics: GET /v1/apps/:id/metrics — scope apps:read. params may be nil.
 	Metrics(ctx context.Context, id string, params *ApplicationMetricsParams, opts ...rest.RequestOpt) ([]ApplicationMetric, error)
@@ -104,7 +105,7 @@ type AppsService interface {
 type ApplicationRealtimeParams struct {
 	// Since resumes the stream after this Unix ms cursor; 0 omits it.
 	Since int64
-	// Metrics adds "metrics" events with the live CPU, memory and network reading.
+	// Metrics adds "metrics" and "next_metrics" events with the live CPU, memory and network reading.
 	Metrics bool
 }
 
@@ -120,11 +121,12 @@ type ApplicationMetricsParams struct {
 type ApplicationRealtimeEventType string
 
 const (
-	ApplicationRealtimeEventTypeLogs      ApplicationRealtimeEventType = "logs"
-	ApplicationRealtimeEventTypeNextLogs  ApplicationRealtimeEventType = "next_logs"
-	ApplicationRealtimeEventTypeSystem    ApplicationRealtimeEventType = "system"
-	ApplicationRealtimeEventTypeMetrics   ApplicationRealtimeEventType = "metrics"
-	ApplicationRealtimeEventTypeHeartbeat ApplicationRealtimeEventType = "heartbeat"
+	ApplicationRealtimeEventTypeLogs        ApplicationRealtimeEventType = "logs"
+	ApplicationRealtimeEventTypeNextLogs    ApplicationRealtimeEventType = "next_logs"
+	ApplicationRealtimeEventTypeNextMetrics ApplicationRealtimeEventType = "next_metrics"
+	ApplicationRealtimeEventTypeSystem      ApplicationRealtimeEventType = "system"
+	ApplicationRealtimeEventTypeMetrics     ApplicationRealtimeEventType = "metrics"
+	ApplicationRealtimeEventTypeHeartbeat   ApplicationRealtimeEventType = "heartbeat"
 )
 
 type ApplicationRealtimeEvent struct {
@@ -133,9 +135,9 @@ type ApplicationRealtimeEvent struct {
 	ID    string
 }
 
-// LiveMetrics decodes the Data of a "metrics" event.
+// LiveMetrics decodes the Data of a "metrics" or "next_metrics" event.
 func (e ApplicationRealtimeEvent) LiveMetrics() (*ApplicationLiveMetrics, error) {
-	if e.Event != ApplicationRealtimeEventTypeMetrics {
+	if e.Event != ApplicationRealtimeEventTypeMetrics && e.Event != ApplicationRealtimeEventTypeNextMetrics {
 		return nil, fmt.Errorf("vertracloud: realtime event %q is not a metrics event", e.Event)
 	}
 	var m ApplicationLiveMetrics
@@ -145,9 +147,11 @@ func (e ApplicationRealtimeEvent) LiveMetrics() (*ApplicationLiveMetrics, error)
 	return &m, nil
 }
 
-// ApplicationLiveMetrics is the reading carried by a "metrics" realtime event,
-// sent about every 5 seconds while the application runs. Rates are measured
-// between two consecutive readings.
+// ApplicationLiveMetrics is the reading carried by a "metrics" or
+// "next_metrics" realtime event, sent about every 5 seconds while the
+// application runs (for "next_metrics", while the new version of a
+// zero-downtime deploy is running). Rates are measured between two
+// consecutive readings.
 type ApplicationLiveMetrics struct {
 	At time.Time `json:"at"`
 	// CPUPercent is the CPU in use as a percentage of the plan's CPU, 0 to 100.
