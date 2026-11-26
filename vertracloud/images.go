@@ -416,6 +416,10 @@ type ApplicationCreateFromImageParams struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	// AutoRestart turns the platform restart after a crash on or off. Nil keeps the default (on).
 	AutoRestart *bool `json:"auto_restart,omitempty"`
+	// Region is the region to create the app in . Empty uses the account's default region.
+	Region RegionID `json:"region,omitempty"`
+	// Node is the server of the region to create the app on. Not open to every account (NODE_NOT_ALLOWED); empty lets the platform pick.
+	Node string `json:"node,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

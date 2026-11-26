@@ -81,14 +81,6 @@ const (
 	DatabaseStatusDown DatabaseStatus = "down"
 )
 
-// DatabaseCluster is a wire enum.
-type DatabaseCluster int
-
-const (
-	DatabaseClusterUSA1 DatabaseCluster = 1
-	DatabaseClusterUSA2 DatabaseCluster = 2
-)
-
 // ---------------------------------------------------------------------------
 // Payload structs
 // ---------------------------------------------------------------------------
@@ -96,15 +88,18 @@ const (
 // Database is the shape returned by Get and by every mutating
 // route that echoes the database back.
 type Database struct {
-	ID          string          `json:"id"`
-	Cluster     DatabaseCluster `json:"cluster"`
-	Type        DatabaseType    `json:"type"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	OwnerID     string          `json:"owner_id"`
-	OwnerPlan   *PlanName       `json:"owner_plan"`
-	Status      DatabaseStatus  `json:"status"`
-	RAM         int             `json:"ram"`
+	ID string `json:"id"`
+	// Region is where the database runs; it never changes after creation.
+	Region RegionID `json:"region"`
+	// Node is the server of the region that runs the database (e.g. "ny1").
+	Node        string         `json:"node"`
+	Type        DatabaseType   `json:"type"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	OwnerID     string         `json:"owner_id"`
+	OwnerPlan   *PlanName      `json:"owner_plan"`
+	Status      DatabaseStatus `json:"status"`
+	RAM         int            `json:"ram"`
 	// Host is e.g. "vertra-cloud-<type>-<dbId>.vertraweb.app".
 	Host         string     `json:"host"`
 	Port         int        `json:"port"`
@@ -252,6 +247,10 @@ type DatabaseCreateBody struct {
 	WorkspaceID string `json:"workspace_id,omitempty"`
 	SnapshotID  string `json:"snapshot_id,omitempty"`
 	Version     string `json:"version,omitempty"`
+	// Region is the region to create the database in . Empty uses the account's default region.
+	Region RegionID `json:"region,omitempty"`
+	// Node is the server of the region to create the database on. Not open to every account (NODE_NOT_ALLOWED); empty lets the platform pick.
+	Node string `json:"node,omitempty"`
 }
 
 // DatabaseUpdateBody is the body of PUT /v1/databases/:id. Every field is

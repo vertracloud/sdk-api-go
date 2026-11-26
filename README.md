@@ -230,6 +230,19 @@ err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes 
 
 `Application.Domains` carries the same list. Reads need `apps:read`; add, update, remove and connect need `apps:write`.
 
+### Regions and nodes
+
+Every application and database runs in one region (`Region`, a `RegionID`: `RegionNewYork` = `"ny"`, `RegionSaoPaulo` = `"sp"`) on one server of it (`Node`, for example `"ny1"`). Both come in the payload and never change.
+
+```go
+app, err := client.Apps.CreateFromImage(ctx, vertracloud.ApplicationCreateFromImageParams{
+	ImageID: imageID, Name: "bot", Memory: 256,
+	Region: vertracloud.RegionSaoPaulo, // optional: omitted, the account's default region is used
+})
+```
+
+`Region` and `Node` are optional in `ApplicationCreateParams`, `ApplicationCreateFromImageParams` and `DatabaseCreateBody`. `Node` is not open to every account. Errors: `ErrCodeRegionNotAvailable` (400), `ErrCodeNodeNotAllowed` (403) and `ErrCodeNodeNotInRegion` (400).
+
 ### Plans
 
 `PlanName` holds a plan name. There are 22 names (`PlanNameStarter1`, `PlanNameStarter2`, `PlanNamePro4` to `PlanNamePro8`, `PlanNameBusiness12` to `PlanNameBusiness24`, `PlanNameEnterprise32` to `PlanNameEnterprise512`). `Account.Get` returns `Plan == nil` for an account without a plan, and apps, databases and workspaces expose the owner's plan as `OwnerPlan *PlanName` (nil = no plan).

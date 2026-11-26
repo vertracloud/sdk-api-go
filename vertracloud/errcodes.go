@@ -60,6 +60,11 @@ const (
 	ErrCodeStackTransformEmpty         = "STACK_TRANSFORM_EMPTY"
 	ErrCodeStackBlobPrefixTaken        = "STACK_BLOB_PREFIX_TAKEN"
 
+	// Regions and nodes.
+	ErrCodeRegionNotAvailable = "REGION_NOT_AVAILABLE" // 400
+	ErrCodeNodeNotAllowed     = "NODE_NOT_ALLOWED"     // 403
+	ErrCodeNodeNotInRegion    = "NODE_NOT_IN_REGION"   // 400
+
 	// Web Analytics.
 	ErrCodePlanDoesNotSupportWebAnalyticsPerformance = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_PERFORMANCE" // 403
 	ErrCodePlanDoesNotSupportWebAnalyticsRequests    = "PLAN_DOES_NOT_SUPPORT_WEB_ANALYTICS_REQUESTS"    // 403

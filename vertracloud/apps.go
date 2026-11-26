@@ -211,14 +211,6 @@ const (
 	ApplicationStatusBuilding ApplicationStatus = "building"
 )
 
-// ApplicationCluster is a wire enum.
-type ApplicationCluster int
-
-const (
-	ApplicationClusterUSA1 ApplicationCluster = 1
-	ApplicationClusterUSA2 ApplicationCluster = 2
-)
-
 // ApplicationType is a wire enum.
 type ApplicationType int
 
@@ -332,8 +324,11 @@ type ApplicationShieldCooldown struct {
 // Application is the shape returned by Get and by every
 // mutating route that echoes the app back.
 type Application struct {
-	ID             string                     `json:"id"`
-	Cluster        ApplicationCluster         `json:"cluster"`
+	ID string `json:"id"`
+	// Region is where the application runs; it never changes after creation.
+	Region RegionID `json:"region"`
+	// Node is the server of the region that runs the application (e.g. "ny1").
+	Node           string                     `json:"node"`
 	Type           ApplicationType            `json:"type"`
 	Name           string                     `json:"name"`
 	Description    string                     `json:"description,omitempty"`
@@ -807,6 +802,10 @@ type ApplicationCreateParams struct {
 	Envs      []ApplicationEnvironmentInput
 	// AutoRestart sets whether the platform restarts the application after a crash; nil leaves the platform default.
 	AutoRestart *bool
+	// Region is the region to create the app in . Empty uses the account's default region.
+	Region RegionID
+	// Node is the server of the region to create the app on. Not open to every account (NODE_NOT_ALLOWED); empty lets the platform pick.
+	Node string
 }
 
 // ApplicationRestartBody is the optional body of POST /v1/apps/:id/restart.
@@ -1156,6 +1155,12 @@ func (s *appsServiceImpl) Create(ctx context.Context, params ApplicationCreatePa
 	}
 	if params.AutoRestart != nil {
 		fields = append(fields, multipartField{Name: "auto_restart", Value: strconv.FormatBool(*params.AutoRestart)})
+	}
+	if params.Region != "" {
+		fields = append(fields, multipartField{Name: "region", Value: string(params.Region)})
+	}
+	if params.Node != "" {
+		fields = append(fields, multipartField{Name: "node", Value: params.Node})
 	}
 
 	body, contentType := newMultipartBody(fields)
