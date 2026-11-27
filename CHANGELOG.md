@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/vertracloud/sdk-api-go/compare/v0.4.5...v0.5.0) (2026-11-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* ApplicationCreateParams, ApplicationCreateFromImageParams and DatabaseCreateBody no longer have Node, and ErrCodeNodeNotAllowed / ErrCodeNodeNotInRegion were removed. Node in responses is the server name.
+* Application.Cluster, Database.Cluster, ApplicationCluster and DatabaseCluster were removed.
+
+### Features
+
+* node removed from creation params ([22ee0e9](https://github.com/vertracloud/sdk-api-go/commit/22ee0e98eac22cb2df9cba9c21e7a684df7efa26))
+* region and node replace cluster ([569c9b5](https://github.com/vertracloud/sdk-api-go/commit/569c9b558d1f074b6e7d8d39c82a072d633a8b32))
+
 ## [0.4.5](https://github.com/vertracloud/sdk-api-go/compare/v0.4.4...v0.4.5) (2026-11-25)
 
 
