@@ -232,7 +232,7 @@ err = client.Apps.Domains().Remove(ctx, appID, domainID)        // also removes 
 
 ### Regions and nodes
 
-Every application and database runs in one region (`Region`, a `RegionID`: `RegionNewYork` = `"ny"`, `RegionSaoPaulo` = `"sp"`) on one server of it (`Node`, for example `"ny1"`). Both come in the payload and never change.
+Every application and database runs in one region (`Region`, a `RegionID`: `RegionNewYork` = `"ny"`, `RegionSaoPaulo` = `"sp"`) on one server (`Node`, the server name, for example `"amethyst"`). Both come in the payload and never change; you choose only the region on creation.
 
 ```go
 app, err := client.Apps.CreateFromImage(ctx, vertracloud.ApplicationCreateFromImageParams{
@@ -241,7 +241,7 @@ app, err := client.Apps.CreateFromImage(ctx, vertracloud.ApplicationCreateFromIm
 })
 ```
 
-`Region` and `Node` are optional in `ApplicationCreateParams`, `ApplicationCreateFromImageParams` and `DatabaseCreateBody`. `Node` is not open to every account. Errors: `ErrCodeRegionNotAvailable` (400), `ErrCodeNodeNotAllowed` (403) and `ErrCodeNodeNotInRegion` (400).
+`Region` is optional in `ApplicationCreateParams`, `ApplicationCreateFromImageParams` and `DatabaseCreateBody`; there is no field to pick the server. Error: `ErrCodeRegionNotAvailable` (400).
 
 ### Plans
 

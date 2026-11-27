@@ -91,7 +91,7 @@ type Database struct {
 	ID string `json:"id"`
 	// Region is where the database runs; it never changes after creation.
 	Region RegionID `json:"region"`
-	// Node is the server of the region that runs the database (e.g. "ny1").
+	// Node is the name of the server that runs the database (e.g. "amethyst").
 	Node        string         `json:"node"`
 	Type        DatabaseType   `json:"type"`
 	Name        string         `json:"name"`
@@ -249,8 +249,6 @@ type DatabaseCreateBody struct {
 	Version     string `json:"version,omitempty"`
 	// Region is the region to create the database in . Empty uses the account's default region.
 	Region RegionID `json:"region,omitempty"`
-	// Node is the server of the region to create the database on. Not open to every account (NODE_NOT_ALLOWED); empty lets the platform pick.
-	Node string `json:"node,omitempty"`
 }
 
 // DatabaseUpdateBody is the body of PUT /v1/databases/:id. Every field is
